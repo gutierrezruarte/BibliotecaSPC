@@ -741,77 +741,78 @@
         <div class="relative flex h-screen overflow-hidden">
             <!-- Barra Lateral (Sidebar) -->
             <aside id="sidebar" class="h-full w-72 bg-inst-dark text-inst-text-dark p-4 flex flex-col space-y-2 shadow-lg transition-all duration-300 ease-in-out z-20">
-                <div class="text-center mb-2 pt-2">
-                    <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-3 h-20 w-20 object-contain" onerror="this.src='https://placehold.co/80x80/111827/FFFFFF?text=Escudo';">
-                    <h1 class="text-xl font-semibold text-kumera-400 sidebar-text">Biblioteca Institucional</h1>
-                    <p id="authStatus" class="text-xs text-gray-400 mt-1 truncate sidebar-text">No Autenticado</p>
+                <div id="sidebar-content">
+                    <div class="text-center mb-2 pt-2">
+                        <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-3 h-20 w-20 object-contain" onerror="this.src='https://placehold.co/80x80/111827/FFFFFF?text=Escudo';">
+                        <h1 class="text-xl font-semibold text-kumera-400 sidebar-text">Biblioteca Institucional</h1>
+                        <p id="authStatus" class="text-xs text-gray-400 mt-1 truncate sidebar-text">No Autenticado</p>
+                    </div>
+                    
+                    <div class="space-y-2 px-2">
+                        <button id="newFileBtn" class="w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                            <span class="sidebar-text">Nuevo Archivo</span>
+                        </button>
+                        <input type="text" id="searchInput" placeholder="Buscar..." class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-kumera-500 border-gray-600 shadow">
+                    </div>
+                    
+                    <nav class="flex-1 space-y-1 px-2 overflow-y-auto">
+                        <a href="#" class="sidebar-filter-item active-filter group" data-main-category="Todos">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                            <span class="sidebar-text">Todos</span>
+                        </a>
+                        <!-- Menú Legislación -->
+                        <div>
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion">
+                                <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg><span class="sidebar-text">Legislación</span></span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                            </button>
+                            <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación">Ver Todo</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Tratados Internacionales">Tratados</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Nacional">Constitución Nacional</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Nacionales">Leyes Nacionales</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Códigos">Códigos</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Nacionales">Decretos Nacionales</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Provincial">Constitución Provincial</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Provinciales">Leyes Provinciales</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Provinciales">Decretos Provinciales</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Resoluciones Ministeriales">Resoluciones</a>
+                            </div>
+                        </div>
+                         <a href="#" class="sidebar-filter-item group" data-main-category="Doctrina">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                            <span class="sidebar-text">Doctrina</span>
+                        </a>
+                        <div>
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
+                                <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.496 2.132a1 1 0 00-.992 0L1.54 6.632V8.5A1.5 1.5 0 003 10v5.5a1.5 1.5 0 001.5 1.5h9a1.5 1.5 0 001.5-1.5V10a1.5 1.5 0 001.46-1.368V6.632l-7.964-4.5zM3 15.25V10h14v5.25A1.75 1.75 0 0115.25 17H4.75A1.75 1.75 0 013 15.25zM16 8H4V7.108l6-3.428 6 3.428V8z" clip-rule="evenodd" /><path d="M7.725 11.913l.743-.424a.5.5 0 01.532 0l.743.424a.5.5 0 00.532-.073L12 9.857V13H8V9.857l1.725 1.983a.5.5 0 00.532.073z" /></svg><span class="sidebar-text">Jurisprudencia</span></span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                            </button>
+                            <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia">Ver Todo</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Internacional">Internacional</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Nacional">Nacional</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Federal">Federal</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Provincial">Provincial</a>
+                            </div>
+                        </div>
+                        <div>
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional">
+                                <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg><span class="sidebar-text">Institucional</span></span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                            </button>
+                            <div id="menu-institucional" class="hidden pl-8 space-y-0.5 mt-1">
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional">Ver Todo</a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Orden del Día">Orden del Día</a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Disposiciones">Disposiciones</a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Memos">Memos</a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Protocolos">Protocolos</a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Comunicaciones">Comunicaciones</a>
+                            </div>
+                        </div>
+                    </nav>
                 </div>
-                
-                <div class="space-y-2 px-2">
-                    <button id="newFileBtn" class="w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
-                        <span class="sidebar-text">Nuevo Archivo</span>
-                    </button>
-                    <input type="text" id="searchInput" placeholder="Buscar..." class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-kumera-500 border-gray-600 shadow">
-                </div>
-                
-                <nav class="flex-1 space-y-1 px-2 overflow-y-auto">
-                    <a href="#" class="sidebar-filter-item active-filter group" data-main-category="Todos">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                        <span class="sidebar-text">Todos</span>
-                    </a>
-                    <!-- Menú Legislación -->
-                    <div>
-                        <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion">
-                            <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg><span class="sidebar-text">Legislación</span></span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                        </button>
-                        <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación">Ver Todo</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Tratados Internacionales">Tratados</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Nacional">Constitución Nacional</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Nacionales">Leyes Nacionales</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Códigos">Códigos</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Nacionales">Decretos Nacionales</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Provincial">Constitución Provincial</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Provinciales">Leyes Provinciales</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Provinciales">Decretos Provinciales</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Resoluciones Ministeriales">Resoluciones</a>
-                        </div>
-                    </div>
-                     <a href="#" class="sidebar-filter-item group" data-main-category="Doctrina">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
-                        <span class="sidebar-text">Doctrina</span>
-                    </a>
-                    <div>
-                        <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
-                            <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.496 2.132a1 1 0 00-.992 0L1.54 6.632V8.5A1.5 1.5 0 003 10v5.5a1.5 1.5 0 001.5 1.5h9a1.5 1.5 0 001.5-1.5V10a1.5 1.5 0 001.46-1.368V6.632l-7.964-4.5zM3 15.25V10h14v5.25A1.75 1.75 0 0115.25 17H4.75A1.75 1.75 0 013 15.25zM16 8H4V7.108l6-3.428 6 3.428V8z" clip-rule="evenodd" /><path d="M7.725 11.913l.743-.424a.5.5 0 01.532 0l.743.424a.5.5 0 00.532-.073L12 9.857V13H8V9.857l1.725 1.983a.5.5 0 00.532.073z" /></svg><span class="sidebar-text">Jurisprudencia</span></span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                        </button>
-                        <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia">Ver Todo</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Internacional">Internacional</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Nacional">Nacional</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Federal">Federal</a>
-                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Provincial">Provincial</a>
-                        </div>
-                    </div>
-                    <div>
-                        <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional">
-                            <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg><span class="sidebar-text">Institucional</span></span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                        </button>
-                        <div id="menu-institucional" class="hidden pl-8 space-y-0.5 mt-1">
-                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional">Ver Todo</a>
-                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Orden del Día">Orden del Día</a>
-                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Disposiciones">Disposiciones</a>
-                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Memos">Memos</a>
-                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Protocolos">Protocolos</a>
-                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Comunicaciones">Comunicaciones</a>
-                        </div>
-                    </div>
-                </nav>
-
                 <div class="mt-auto pt-4 border-t border-gray-700 px-2 space-y-3">
                      <a id="adminUsersBtn" href="#" class="sidebar-item group hidden" data-main-category="AdministrarUsuarios">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.82 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.82 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.82-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.82-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
