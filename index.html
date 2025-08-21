@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biblioteca Institucional</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Configuración de colores personalizados para Tailwind CSS -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'inst-dark': '#111827',      // Gris oscuro para el sidebar
+                        'inst-light': '#F9FAFB',     // Gris muy claro para el fondo principal
+                        'inst-text-dark': '#D1D5DB', // Texto claro en el sidebar
+                        'inst-text-light': '#374151',// Texto oscuro en el contenido principal
+                        'kumera': {
+                            '50': '#f8f7ee',
+                            '100': '#eeecd3',
+                            '200': '#dfd9a9',
+                            '300': '#ccbf78',
+                            '400': '#bca953',
+                            '500': '#ad9645',
+                            '600': '#94783a',
+                            '700': '#785c31',
+                            '800': '#654c2e',
+                            '900': '#57412c',
+                            '950': '#322216',
+                        },
+                    }
+                },
+                fontFamily: {
+                    sans: ['Inter', 'sans-serif'],
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Estilos para la barra de desplazamiento personalizada */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #9ca3af; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        /* Clases de utilidad para los elementos de la barra lateral para transiciones suaves */
+        .sidebar-item, .sidebar-filter-item {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 0.625rem 0.75rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            color: #D1D5DB; /* gray-300 */
+        }
+        .sidebar-filter-item:hover, .sidebar-item:hover {
+            background-color: #374151; /* gray-700 */
+            color: #FFFFFF;
+        }
+        .sidebar-submenu-item {
+            padding-left: 1.75rem;
+            font-size: 0.875rem;
+        }
+        .sidebar-submenu-item:hover {
+            background-color: #4B5563;
+            color: #FFFFFF;
+        }
+        .active-filter {
+            background-color: #ad9645 !important; /* kumera-500 */
+            color: #FFFFFF !important;
+        }
+        .active-filter svg {
+            color: #FFFFFF !important;
+        }
+
+        /* Estilos para la animación de carga (spinner) */
+        .spinner {
+            border-top-color: transparent;
+            border-right-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <script type="module">
+        // Importaciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, updateDoc, orderBy, limit, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCYxPVi2VV3LuCxpKr-YNdJ0zCUKPbkcLg",
+            authDomain: "bibliotecaspc-45ed0.firebaseapp.com",
+            projectId: "bibliotecaspc-45ed0",
+            storageBucket: "bibliotecaspc-45ed0.firebasestorage.app",
+            messagingSenderId: "340130340601",
+            appId: "1:340130340601:web:50bc267bb4d1deb8ba0c28"
+        };
+        
+        // Variables globales de la aplicación
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let app, db;
+        let userRole = null;
+        let userId = null;
+        const ADMIN_USER = '36219951';
+        const ADMIN_PASSWORD = 'Marquitos123';
+
+        // Variables de estado para filtros y edición
+        let currentFilterCategory = null;
+        let currentFilterSubcategory = null;
+        let currentEditingDocId = null;
+        let currentViewingDocId = null;
+        let unsubscribe; // Para manejar la escucha de Firestore
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // --- Referencias a Elementos del DOM ---
+            const mainContentArea = document.getElementById('mainContentArea');
+            const documentFormView = document.getElementById('documentFormView');
+            const documentListView = document.getElementById('documentListView');
+            const documentDetailView = document.getElementById('documentDetailView');
+            const userAdminView = document.getElementById('userAdminView');
+            const createIncidentView = document.getElementById('createIncidentView');
+            const loginView = document.getElementById('loginView');
+            const appContainer = document.getElementById('appContainer');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const formLoadingIndicator = document.getElementById('formLoadingIndicator');
+            const documentsTableBody = document.getElementById('documentsTableBody');
+            const searchInput = document.getElementById('searchInput');
+            
+            const uploadForm = document.getElementById('uploadForm');
+            const formTitle = document.getElementById('formTitle');
+            const submitBtn = document.getElementById('submitBtn');
+            const saveDraftBtn = document.getElementById('saveDraftBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            const categorySelect = document.getElementById('s_category');
+            const subcategorySelect = document.getElementById('s_subcategory');
+            const scopeSelect = document.getElementById('s_scope');
+            const statusSelect = document.getElementById('s_status');
+            const userKeywordsInput = document.getElementById('userKeywords');
+            const observationsTextarea = document.getElementById('s_observations');
+
+            const detailFileName = document.getElementById('detailFileName');
+            const detailCategory = document.getElementById('detailCategory');
+            const detailSubcategory = document.getElementById('detailSubcategory');
+            const detailDocumentNumber = document.getElementById('detailDocumentNumber');
+            const detailSanctionDate = document.getElementById('detailSanctionDate');
+            const detailPromulgationDate = document.getElementById('detailPromulgationDate');
+            const detailScope = document.getElementById('detailScope');
+            const detailStatus = document.getElementById('detailStatus');
+            const detailUserKeywords = document.getElementById('detailUserKeywords');
+            const detailObservations = document.getElementById('detailObservations');
+            const pdfPreviewContainer = document.getElementById('pdfPreviewContainer');
+            const detailDeleteBtn = document.getElementById('detailDeleteBtn');
+            const detailEditBtn = document.getElementById('detailEditBtn');
+            const closeDetailViewBtn = document.getElementById('closeDetailViewBtn');
+            const detailOpenDriveLink = document.getElementById('detailOpenDriveLink'); 
+
+            const loginForm = document.getElementById('loginForm');
+            const loginUsernameInput = document.getElementById('loginUsername');
+            const loginPasswordInput = document.getElementById('loginPassword');
+            const loginMessage = document.getElementById('loginMessage');
+            const authStatusDiv = document.getElementById('authStatus');
+            const newFileBtn = document.getElementById('newFileBtn');
+            const adminUsersBtn = document.getElementById('adminUsersBtn');
+            const createIncidentBtn = document.getElementById('createIncidentBtn');
+            const signOutBtn = document.getElementById('signOutBtn');
+            
+            const userAdminForm = document.getElementById('userAdminForm');
+            const incidentForm = document.getElementById('incidentForm');
+            const userTableBody = document.getElementById('userTableBody');
+
+            const modal = document.getElementById('modal');
+            const modalMessage = document.getElementById('modalMessage');
+            const modalCloseButton = document.getElementById('modalCloseButton');
+            
+            const confirmationModal = document.getElementById('confirmationModal');
+            const confirmationModalMessage = document.getElementById('confirmationModalMessage');
+            const confirmBtn = document.getElementById('confirmBtn');
+            const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
+            let confirmCallback = null;
+
+            const subcategoryMap = {
+                "Legislación": ["Tratados Internacionales", "Constitución Nacional", "Leyes Nacionales", "Códigos", "Decretos Nacionales", "Constitución Provincial", "Leyes Provinciales", "Decretos Provinciales", "Resoluciones Ministeriales"],
+                "Doctrina": [],
+                "Jurisprudencia": ["Internacional", "Nacional", "Federal", "Provincial"],
+                "Institucional": ["Orden del Día", "Disposiciones", "Memos", "Protocolos", "Comunicaciones"]
+            };
+
+            // --- Inicialización de Firebase ---
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                showModal("Error crítico al inicializar la aplicación. Por favor, recarga la página.");
+                return;
+            }
+            
+            // --- Funciones de la Aplicación ---
+            
+            function getEmbeddableDriveLink(url) {
+                if (!url || typeof url !== 'string') return 'about:blank';
+                let fileId = null;
+                const regex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
+                const match = url.match(regex);
+                if (match && match[1]) {
+                    fileId = match[1];
+                    return `https://drive.google.com/file/d/${fileId}/preview`;
+                }
+                if (url.includes('/preview')) {
+                    return url;
+                }
+                return 'about:blank';
+            }
+
+            function showView(viewToShow) {
+                [documentFormView, documentListView, documentDetailView, userAdminView, createIncidentView].forEach(view => view.classList.add('hidden'));
+                const viewMap = { 'form': documentFormView, 'list': documentListView, 'detail': documentDetailView, 'userAdmin': userAdminView, 'createIncident': createIncidentView };
+                const viewElement = viewMap[viewToShow] || documentListView;
+                viewElement.classList.remove('hidden');
+                if (viewToShow === 'userAdmin') renderUsers();
+            }
+
+            function showModal(message) {
+                modalMessage.textContent = message;
+                modal.classList.remove('hidden');
+            }
+
+            function showConfirmationModal(message, onConfirm) {
+                confirmationModalMessage.textContent = message;
+                confirmCallback = onConfirm;
+                confirmationModal.classList.remove('hidden');
+            }
+
+            function toggleAdminControls(isAdmin) {
+                [newFileBtn, adminUsersBtn, signOutBtn, createIncidentBtn].forEach(el => el.classList.toggle('hidden', !isAdmin));
+                authStatusDiv.textContent = isAdmin ? 'Autenticado como Administrador' : 'No Autenticado';
+            }
+
+            const loginSuccess = () => {
+                userRole = 'admin';
+                userId = ADMIN_USER;
+                loginView.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                toggleAdminControls(true);
+                showView('list');
+                loadDocuments();
+            };
+
+            const logout = () => {
+                userRole = null;
+                userId = null;
+                loginView.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                toggleAdminControls(false);
+                documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Inicia sesión para ver los documentos.</td></tr>';
+                if (unsubscribe) unsubscribe();
+            };
+
+            async function handleSaveDocument(isDraft = false) {
+                formLoadingIndicator.classList.remove('hidden');
+                
+                const fileName = document.getElementById('s_fileName').value.trim();
+                const pdfLink = document.getElementById('s_pdfLink').value.trim();
+
+                if (!fileName || !pdfLink) {
+                    showModal('El nombre del archivo y el enlace al PDF son obligatorios.');
+                    formLoadingIndicator.classList.add('hidden');
+                    return;
+                }
+                
+                const docData = {
+                    fileName,
+                    pdfLink,
+                    category: categorySelect.value,
+                    subcategory: subcategorySelect.disabled ? "" : subcategorySelect.value,
+                    documentNumber: document.getElementById('s_documentNumber').value.trim(),
+                    sanctionDate: document.getElementById('s_sanctionDate').value,
+                    promulgationDate: document.getElementById('s_promulgationDate').value,
+                    scope: scopeSelect.value,
+                    status: isDraft ? "Borrador" : (statusSelect.value || "Vigente"),
+                    userKeywords: userKeywordsInput.value.split(',').map(kw => kw.trim()).filter(Boolean),
+                    observations: observationsTextarea.value.trim(),
+                    timestamp: new Date().toISOString(),
+                    uploadedBy: 'admin',
+                    uploadedById: userId,
+                };
+
+                try {
+                    if (currentEditingDocId) {
+                        const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, currentEditingDocId);
+                        await setDoc(docRef, docData, { merge: true });
+                        showModal('Documento actualizado correctamente.');
+                    } else {
+                        const collectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
+                        await addDoc(collectionRef, docData);
+                        showModal(`Documento ${isDraft ? 'guardado como borrador' : 'guardado'}.`);
+                    }
+                    uploadForm.reset();
+                    currentEditingDocId = null;
+                    showView('list');
+                } catch (error) {
+                    console.error("Error guardando documento:", error);
+                    showModal(`Error al guardar el documento: ${error.message}`);
+                } finally {
+                    formLoadingIndicator.classList.add('hidden');
+                }
+            }
+
+            function renderDocuments(docsArray) {
+                documentsTableBody.innerHTML = '';
+                if (docsArray.length === 0) {
+                    documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No se encontraron documentos.</td></tr>';
+                    return;
+                }
+                docsArray.forEach((docData) => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-200 hover:bg-kumera-50 text-sm';
+                    const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-ES') : 'N/A';
+                    const keywords = (docData.userKeywords || []).join(', ');
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 text-inst-text-light font-medium">${docData.fileName}</td>
+                        <td class="py-3 px-4 text-inst-text-light">${docData.category || 'N/A'}</td>
+                        <td class="py-3 px-4 text-inst-text-light">${docData.subcategory || 'N/A'}</td>
+                        <td class="py-3 px-4 text-inst-text-light">${formatDate(docData.sanctionDate)}</td>
+                        <td class="py-3 px-4 text-inst-text-light" title="${keywords}">${keywords.substring(0, 30)}${keywords.length > 30 ? '...' : ''}</td>
+                        <td class="py-3 px-4 whitespace-nowrap">
+                            <button class="view-btn text-sky-600 hover:text-sky-800 p-1 rounded hover:bg-sky-100" data-id="${docData.id}" title="Ver"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg></button>
+                            ${userRole === 'admin' ? `
+                            <button class="edit-btn text-kumera-600 hover:text-kumera-800 p-1 rounded hover:bg-kumera-100" data-id="${docData.id}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
+                            <button class="delete-btn text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-100" data-id="${docData.id}" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
+                            ` : ''}
+                        </td>`;
+                    documentsTableBody.appendChild(tr);
+                });
+                documentsTableBody.querySelectorAll('.view-btn').forEach(b => b.addEventListener('click', (e) => handleView(e.currentTarget.dataset.id)));
+                if (userRole === 'admin') {
+                    documentsTableBody.querySelectorAll('.edit-btn').forEach(b => b.addEventListener('click', (e) => handleEdit(e.currentTarget.dataset.id)));
+                    documentsTableBody.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', (e) => handleDelete(e.currentTarget.dataset.id)));
+                }
+            }
+
+            function loadDocuments() {
+                loadingIndicator.classList.remove('hidden');
+                if (unsubscribe) unsubscribe();
+
+                const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
+                
+                let q;
+                const constraints = [orderBy("timestamp", "desc")];
+                if (currentFilterCategory) {
+                    constraints.push(where("category", "==", currentFilterCategory));
+                }
+                if (currentFilterSubcategory) {
+                    constraints.push(where("subcategory", "==", currentFilterSubcategory));
+                }
+                constraints.push(limit(50));
+                
+                q = query(filesCollectionRef, ...constraints);
+
+                unsubscribe = onSnapshot(q, (snapshot) => {
+                    let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    const searchTerm = searchInput.value.toLowerCase();
+                    if (searchTerm) {
+                        docs = docs.filter(doc => 
+                            Object.values(doc).some(val => String(val).toLowerCase().includes(searchTerm))
+                        );
+                    }
+                    
+                    renderDocuments(docs);
+                    loadingIndicator.classList.add('hidden');
+                }, (error) => {
+                    console.error("Error al obtener documentos:", error);
+                    showModal(`Error al cargar documentos: ${error.message}`);
+                    loadingIndicator.classList.add('hidden');
+                });
+            }
+
+            async function handleView(docId) {
+                loadingIndicator.classList.remove('hidden');
+                currentViewingDocId = docId;
+                const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
+                try {
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-ES') : 'N/A';
+                        detailFileName.textContent = data.fileName || 'N/A';
+                        detailCategory.textContent = data.category || 'N/A';
+                        detailSubcategory.textContent = data.subcategory || 'N/A';
+                        detailDocumentNumber.textContent = data.documentNumber || 'N/A';
+                        detailSanctionDate.textContent = formatDate(data.sanctionDate);
+                        detailPromulgationDate.textContent = formatDate(data.promulgationDate);
+                        detailScope.textContent = data.scope || 'N/A';
+                        detailStatus.textContent = data.status || 'N/A';
+                        detailUserKeywords.textContent = (data.userKeywords || []).join(', ') || 'N/A';
+                        detailObservations.textContent = data.observations || 'Sin observaciones.';
+                        
+                        if (data.pdfLink) {
+                            detailOpenDriveLink.href = data.pdfLink;
+                            detailOpenDriveLink.classList.remove('hidden');
+                        } else {
+                            detailOpenDriveLink.classList.add('hidden');
+                        }
+                        
+                        const embeddableLink = getEmbeddableDriveLink(data.pdfLink);
+                        if (embeddableLink !== 'about:blank') {
+                            pdfPreviewContainer.innerHTML = `<iframe id="pdfPreviewFrame" src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
+                        } else {
+                            pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <p>No hay vista previa disponible.</p>
+                                <p class="text-xs">El enlace no es válido o no está configurado.</p>
+                            </div>`;
+                        }
+
+                        detailDeleteBtn.dataset.id = docId;
+                        detailEditBtn.dataset.id = docId;
+                        showView('detail');
+                    } else {
+                        showModal('El documento no fue encontrado.');
+                        showView('list');
+                    }
+                } catch (error) {
+                    console.error("Error al ver documento:", error);
+                    showModal(`Error al cargar el documento: ${error.message}`);
+                } finally {
+                    loadingIndicator.classList.add('hidden');
+                }
+            }
+
+            async function handleEdit(docId) {
+                if (userRole !== 'admin') return;
+                loadingIndicator.classList.remove('hidden');
+                const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
+                try {
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        currentEditingDocId = docId;
+                        formTitle.textContent = 'Editar Documento';
+                        submitBtn.textContent = 'Actualizar Documento';
+                        
+                        document.getElementById('s_pdfLink').value = data.pdfLink || '';
+                        document.getElementById('s_fileName').value = data.fileName || '';
+                        categorySelect.value = data.category || '';
+                        categorySelect.dispatchEvent(new Event('change'));
+                        subcategorySelect.value = data.subcategory || '';
+                        scopeSelect.value = data.scope || '';
+                        statusSelect.value = data.status || 'Vigente';
+                        document.getElementById('s_documentNumber').value = data.documentNumber || '';
+                        document.getElementById('s_sanctionDate').value = data.sanctionDate || '';
+                        document.getElementById('s_promulgationDate').value = data.promulgationDate || '';
+                        userKeywordsInput.value = (data.userKeywords || []).join(', ');
+                        observationsTextarea.value = data.observations || '';
+                        showView('form');
+                    } else {
+                        showModal('Documento no encontrado para editar.');
+                    }
+                } catch (error) {
+                    console.error("Error al cargar para editar:", error);
+                    showModal(`Error al cargar el documento: ${error.message}`);
+                } finally {
+                    loadingIndicator.classList.add('hidden');
+                }
+            }
+
+            function handleDelete(docId) {
+                if (userRole !== 'admin') return;
+                showConfirmationModal('¿Está seguro de que desea eliminar este documento? Esta acción no se puede deshacer.', async () => {
+                    loadingIndicator.classList.remove('hidden');
+                    const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
+                    try {
+                        await deleteDoc(docRef);
+                        showModal('Documento eliminado correctamente.');
+                        if (currentViewingDocId === docId) showView('list');
+                    } catch (error) {
+                        console.error("Error al eliminar documento:", error);
+                        showModal(`Error al eliminar el documento: ${error.message}`);
+                    } finally {
+                        loadingIndicator.classList.add('hidden');
+                    }
+                });
+            }
+            
+            async function renderUsers() {
+                if (userRole !== 'admin') return;
+                const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
+                const snapshot = await getDocs(usersCollectionRef);
+                userTableBody.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const userData = doc.data();
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b border-gray-200 hover:bg-gray-50 text-sm";
+                    const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username;
+                    tr.innerHTML = `
+                        <td class="py-3 px-4">${fullName}</td>
+                        <td class="py-3 px-4">${userData.role}</td>
+                        <td class="py-3 px-4 whitespace-nowrap">
+                            <button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7h3a5 5 0 015 5v14a5 5 0 01-5 5h-3a2 2 0 01-2-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 01-2 2H2a5 5 0 01-5-5V7a5 5 0 015-5h3a2 2 0 012 2v3a2 2 0 002 2h4a2 2 0 002-2v-3a2 2 0 012-2z" /></svg></button>
+                            <button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292m0 5.292a4 4 0 110 5.292M21 21L15 15" /></svg></button>
+                        </td>`;
+                    userTableBody.appendChild(tr);
+                });
+                userTableBody.querySelectorAll('.reset-password-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const userId = e.currentTarget.dataset.id;
+                    showConfirmationModal('¿Blanquear la contraseña de este usuario a "0000"?', async () => {
+                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { password: '0000' });
+                        showModal('Contraseña blanqueada.');
+                        renderUsers();
+                    });
+                }));
+                userTableBody.querySelectorAll('.toggle-role-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const userId = e.currentTarget.dataset.id;
+                    const newRole = e.currentTarget.dataset.role === 'admin' ? 'user' : 'admin';
+                    showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
+                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { role: newRole });
+                        showModal('Rol de usuario cambiado.');
+                        renderUsers();
+                    });
+                }));
+            }
+
+            // --- Event Listeners ---
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (loginUsernameInput.value === ADMIN_USER && loginPasswordInput.value === ADMIN_PASSWORD) loginSuccess();
+                else {
+                    loginMessage.textContent = 'Usuario o contraseña incorrectos.';
+                    loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                    loginMessage.classList.remove('hidden');
+                }
+            });
+
+            signOutBtn.addEventListener('click', logout);
+            newFileBtn.addEventListener('click', () => {
+                currentEditingDocId = null;
+                uploadForm.reset();
+                formTitle.textContent = 'Cargar Nuevo Documento';
+                submitBtn.textContent = 'Guardar Documento';
+                showView('form');
+            });
+            adminUsersBtn.addEventListener('click', () => showView('userAdmin'));
+            createIncidentBtn.addEventListener('click', () => showView('createIncident'));
+
+            categorySelect.addEventListener('change', () => {
+                const selectedCategory = categorySelect.value;
+                subcategorySelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
+                if (selectedCategory && subcategoryMap[selectedCategory]?.length > 0) {
+                    subcategoryMap[selectedCategory].forEach(subCat => subcategorySelect.add(new Option(subCat, subCat)));
+                    subcategorySelect.disabled = false;
+                } else {
+                    subcategorySelect.disabled = true;
+                }
+            });
+            uploadForm.addEventListener('submit', (e) => { e.preventDefault(); handleSaveDocument(false); });
+            saveDraftBtn.addEventListener('click', () => handleSaveDocument(true));
+            cancelBtn.addEventListener('click', () => showView('list'));
+
+            closeDetailViewBtn.addEventListener('click', () => showView('list'));
+            detailEditBtn.addEventListener('click', (e) => handleEdit(e.currentTarget.dataset.id));
+            detailDeleteBtn.addEventListener('click', (e) => handleDelete(e.currentTarget.dataset.id));
+
+            searchInput.addEventListener('input', () => loadDocuments());
+            document.querySelectorAll('.sidebar-filter-item').forEach(item => item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const clickedItem = e.currentTarget;
+                document.querySelectorAll('.sidebar-filter-item').forEach(i => i.classList.remove('active-filter'));
+                clickedItem.classList.add('active-filter');
+                currentFilterCategory = clickedItem.dataset.mainCategory === 'Todos' ? null : clickedItem.dataset.mainCategory;
+                currentFilterSubcategory = clickedItem.dataset.subcategory || null;
+                loadDocuments();
+                showView('list');
+            }));
+
+            document.querySelectorAll('.collapsible-trigger').forEach(trigger => trigger.addEventListener('click', () => {
+                const content = document.getElementById(trigger.dataset.target);
+                const icon = trigger.querySelector('svg.transform');
+                content.classList.toggle('hidden');
+                icon.classList.toggle('rotate-90');
+            }));
+
+            modalCloseButton.addEventListener('click', () => modal.classList.add('hidden'));
+            cancelConfirmBtn.addEventListener('click', () => { confirmationModal.classList.add('hidden'); confirmCallback = null; });
+            confirmBtn.addEventListener('click', () => {
+                if (typeof confirmCallback === 'function') confirmCallback();
+                confirmationModal.classList.add('hidden');
+                confirmCallback = null;
+            });
+            
+            userAdminForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const firstName = document.getElementById('userAdminFirstName').value;
+                const lastName = document.getElementById('userAdminLastName').value;
+                const password = document.getElementById('userAdminPassword').value;
+                const role = document.getElementById('userAdminRole').value;
+                if (!firstName || !lastName || !password || !role) { showModal('Todos los campos son obligatorios.'); return; }
+                try {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/users`), { firstName, lastName, password, role });
+                    showModal(`Usuario "${firstName} ${lastName}" creado.`);
+                    userAdminForm.reset();
+                    renderUsers();
+                } catch (error) {
+                    console.error("Error creando usuario:", error);
+                    showModal(`Error: ${error.message}`);
+                }
+            });
+
+            incidentForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const title = document.getElementById('incidentTitle').value;
+                const description = document.getElementById('incidentDescription').value;
+                if (!title || !description) { showModal('El título y la descripción son obligatorios.'); return; }
+                try {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/incidents`), { title, description, reportedBy: userId, timestamp: new Date().toISOString() });
+                    showModal('Incidente reportado.');
+                    incidentForm.reset();
+                    showView('list');
+                } catch (error) {
+                    console.error("Error reportando incidente:", error);
+                    showModal(`Error: ${error.message}`);
+                }
+            });
+
+            document.getElementById('cancelIncidentBtn').addEventListener('click', () => showView('list'));
+        });
+    </script>
+</head>
+<body class="bg-inst-light font-sans text-inst-text-light">
+    <!-- Vista de Login -->
+    <div id="loginView" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-sm">
+            <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-6 h-32 w-32 object-contain" onerror="this.src='https://placehold.co/128x128/111827/FFFFFF?text=Escudo';">
+            <div class="bg-white p-8 rounded-xl shadow-2xl w-full border border-gray-200 text-center">
+                <h2 class="text-2xl font-bold text-inst-dark mb-4">Iniciar Sesión</h2>
+                <form id="loginForm" class="space-y-4">
+                    <div>
+                        <label for="loginUsername" class="block text-sm font-medium text-gray-700 text-left mb-1">Usuario</label>
+                        <input type="text" id="loginUsername" placeholder="Usuario" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-kumera-500 focus:border-kumera-500 transition-shadow" required>
+                    </div>
+                    <div>
+                        <label for="loginPassword" class="block text-sm font-medium text-gray-700 text-left mb-1">Contraseña</label>
+                        <input type="password" id="loginPassword" placeholder="Contraseña" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-kumera-500 focus:border-kumera-500 transition-shadow" required>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300">Ingresar</button>
+                    <p class="text-sm text-gray-500 pt-2">Contacte al administrador para obtener credenciales.</p>
+                    <div id="loginMessage" class="mt-2 p-3 rounded-lg text-sm hidden"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Contenedor Principal de la Aplicación -->
+    <div id="appContainer" class="hidden">
+        <div class="flex h-screen overflow-hidden">
+            <!-- Barra Lateral (Sidebar) -->
+            <aside class="w-72 bg-inst-dark text-inst-text-dark p-4 flex flex-col space-y-4 shadow-lg">
+                <div class="text-center mb-4 pt-2">
+                    <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-3 h-20 w-20 object-contain" onerror="this.src='https://placehold.co/80x80/111827/FFFFFF?text=Escudo';">
+                    <h1 class="text-xl font-semibold text-kumera-400">Biblioteca Institucional</h1>
+                    <p id="authStatus" class="text-xs text-gray-400 mt-1 truncate">No Autenticado</p>
+                </div>
+                
+                <div class="space-y-3 px-2">
+                    <button id="newFileBtn" class="w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md transition hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        <span>Nuevo Archivo</span>
+                    </button>
+                    <input type="text" id="searchInput" placeholder="Buscar en todo..." class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 px-3 py-2.5 rounded-lg text-sm focus:ring-2 focus:ring-kumera-500 border-gray-600 shadow">
+                </div>
+                
+                <nav class="flex-1 space-y-1 px-2 text-sm overflow-y-auto">
+                    <a href="#" class="sidebar-filter-item active-filter group" data-main-category="Todos">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                        <span>Todos</span>
+                    </a>
+                    <!-- Menú Legislación -->
+                    <div>
+                        <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion">
+                            <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg>Legislación</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                        <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación">Ver Todo</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Tratados Internacionales">Tratados</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Nacional">Constitución Nacional</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Nacionales">Leyes Nacionales</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Códigos">Códigos</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Nacionales">Decretos Nacionales</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Provincial">Constitución Provincial</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Provinciales">Leyes Provinciales</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Provinciales">Decretos Provinciales</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Resoluciones Ministeriales">Resoluciones</a>
+                        </div>
+                    </div>
+                     <a href="#" class="sidebar-filter-item group" data-main-category="Doctrina">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                        <span>Doctrina</span>
+                    </a>
+                    <div>
+                        <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
+                            <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.496 2.132a1 1 0 00-.992 0L1.54 6.632V8.5A1.5 1.5 0 003 10v5.5a1.5 1.5 0 001.5 1.5h9a1.5 1.5 0 001.5-1.5V10a1.5 1.5 0 001.46-1.368V6.632l-7.964-4.5zM3 15.25V10h14v5.25A1.75 1.75 0 0115.25 17H4.75A1.75 1.75 0 013 15.25zM16 8H4V7.108l6-3.428 6 3.428V8z" clip-rule="evenodd" /><path d="M7.725 11.913l.743-.424a.5.5 0 01.532 0l.743.424a.5.5 0 00.532-.073L12 9.857V13H8V9.857l1.725 1.983a.5.5 0 00.532.073z" /></svg>Jurisprudencia</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                        <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia">Ver Todo</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Internacional">Internacional</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Nacional">Nacional</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Federal">Federal</a>
+                            <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Provincial">Provincial</a>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional">
+                            <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg>Institucional</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                        <div id="menu-institucional" class="hidden pl-8 space-y-0.5 mt-1">
+                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional">Ver Todo</a>
+                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Orden del Día">Orden del Día</a>
+                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Disposiciones">Disposiciones</a>
+                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Memos">Memos</a>
+                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Protocolos">Protocolos</a>
+                           <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Comunicaciones">Comunicaciones</a>
+                        </div>
+                    </div>
+                </nav>
+
+                <div class="mt-auto pt-4 border-t border-gray-700 px-2 space-y-3">
+                     <a id="adminUsersBtn" href="#" class="sidebar-item group hidden" data-main-category="AdministrarUsuarios">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.82 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.82 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.82-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.82-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        <span>Admin Usuarios</span>
+                    </a>
+                    <a id="createIncidentBtn" href="#" class="sidebar-item group hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <span>Reportar Incidente</span>
+                    </a>
+                    <button id="signOutBtn" class="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md transition hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>
+                        <span>Cerrar Sesión</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Área de Contenido Principal -->
+            <main id="mainContentArea" class="flex-1 bg-inst-light p-6 md:p-8 overflow-y-auto">
+                <div id="loadingIndicator" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50 hidden">
+                    <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-kumera-500"></div>
+                </div>
+                
+                <div id="documentListView" class="">
+                    <h2 class="text-3xl font-bold text-inst-dark mb-2">Biblioteca Institucional</h2>
+                    <p class="text-sm text-gray-600 mb-6">Explore los documentos disponibles. Haga clic en el icono del ojo para ver detalles.</p>
+                    <div class="bg-white rounded-xl shadow-lg overflow-x-auto border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="py-3.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nombre</th>
+                                    <th class="py-3.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                    <th class="py-3.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Subcategoría</th>
+                                    <th class="py-3.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fecha Sanción</th>
+                                    <th class="py-3.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Palabras Clave</th>
+                                    <th class="py-3.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="documentsTableBody" class="divide-y divide-gray-200 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="documentFormView" class="hidden">
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg max-w-4xl mx-auto border border-gray-200">
+                        <h2 id="formTitle" class="text-2xl font-semibold text-inst-dark mb-6 border-b pb-4 border-gray-300"></h2>
+                        <div id="formLoadingIndicator" class="text-center py-4 hidden">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-kumera-500 mx-auto"></div>
+                            <p class="text-sm text-gray-600 mt-2">Procesando...</p>
+                        </div>
+                        <form id="uploadForm" class="space-y-6">
+                             <div>
+                                 <label for="s_pdfLink" class="block text-sm font-medium text-gray-700 mb-1">Enlace del PDF en Google Drive <span class="text-red-500">*</span></label>
+                                 <input type="url" id="s_pdfLink" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-kumera-500" placeholder="https://drive.google.com/file/d/...">
+                                 <p class="text-xs text-gray-500 mt-1">Asegúrate de que el archivo sea público ("Cualquier persona con el enlace").</p>
+                             </div>
+                             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 border-t pt-6">
+                                 <div>
+                                     <label for="s_fileName" class="block text-sm font-medium text-gray-700 mb-1">Nombre del Archivo <span class="text-red-500">*</span></label>
+                                     <input type="text" id="s_fileName" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-kumera-500">
+                                 </div>
+                                 <div>
+                                     <label for="s_category" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                                     <select id="s_category" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white">
+                                         <option value="">Seleccione...</option>
+                                         <option value="Legislación">Legislación</option>
+                                         <option value="Doctrina">Doctrina</option>
+                                         <option value="Jurisprudencia">Jurisprudencia</option>
+                                         <option value="Institucional">Institucional</option>
+                                     </select>
+                                 </div>
+                                 <div>
+                                     <label for="s_subcategory" class="block text-sm font-medium text-gray-700 mb-1">Subcategoría</label>
+                                     <select id="s_subcategory" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white" disabled>
+                                         <option value="">Seleccione...</option>
+                                     </select>
+                                 </div>
+                                 <div>
+                                     <label for="s_documentNumber" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
+                                     <input type="text" id="s_documentNumber" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm">
+                                 </div>
+                                  <div>
+                                     <label for="s_sanctionDate" class="block text-sm font-medium text-gray-700 mb-1">Fecha Sanción</label>
+                                     <input type="date" id="s_sanctionDate" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm">
+                                 </div>
+                                 <div>
+                                     <label for="s_promulgationDate" class="block text-sm font-medium text-gray-700 mb-1">Fecha Promulgación</label>
+                                     <input type="date" id="s_promulgationDate" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm">
+                                 </div>
+                                  <div>
+                                     <label for="s_scope" class="block text-sm font-medium text-gray-700 mb-1">Alcance</label>
+                                     <select id="s_scope" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white">
+                                         <option value="">Seleccione...</option>
+                                         <option value="Internacional">Internacional</option>
+                                         <option value="Nacional">Nacional</option>
+                                         <option value="Federal">Federal</option>
+                                         <option value="Provincial">Provincial</option>
+                                     </select>
+                                 </div>
+                                 <div>
+                                     <label for="s_status" class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                                     <select id="s_status" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white">
+                                         <option value="Vigente">Vigente</option>
+                                         <option value="Derogado">Derogado</option>
+                                         <option value="No se especifica">No se especifica</option>
+                                     </select>
+                                 </div>
+                             </div>
+                             <div>
+                                 <label for="userKeywords" class="block text-sm font-medium text-gray-700 mb-1">Palabras Clave</label>
+                                 <input type="text" id="userKeywords" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="Ej: presupuesto, informe">
+                             </div>
+                              <div>
+                                 <label for="s_observations" class="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
+                                 <textarea id="s_observations" rows="3" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm"></textarea>
+                             </div>
+                            <div class="flex items-center justify-end space-x-3 pt-5 border-t border-gray-200 mt-4">
+                                <button type="button" id="cancelBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2.5 px-5 rounded-lg">Cancelar</button>
+                                <button type="button" id="saveDraftBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2.5 px-5 rounded-lg">Guardar Borrador</button>
+                                <button type="submit" id="submitBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg"></button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="documentDetailView" class="hidden">
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200">
+                        <div class="flex justify-between items-start mb-6 border-b border-gray-300 pb-4">
+                            <h2 id="detailFileName" class="text-2xl md:text-3xl font-bold text-inst-dark"></h2>
+                            <button id="closeDetailViewBtn" class="text-gray-400 hover:text-red-600 p-2 rounded-full hover:bg-red-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 mb-6 text-sm">
+                             <div><strong class="text-gray-600">Categoría:</strong> <span id="detailCategory"></span></div>
+                             <div><strong class="text-gray-600">Subcategoría:</strong> <span id="detailSubcategory"></span></div>
+                             <div><strong class="text-gray-600">Número:</strong> <span id="detailDocumentNumber"></span></div>
+                             <div><strong class="text-gray-600">Fecha Sanción:</strong> <span id="detailSanctionDate"></span></div>
+                             <div><strong class="text-gray-600">Fecha Promulg.:</strong> <span id="detailPromulgationDate"></span></div>
+                             <div><strong class="text-gray-600">Alcance:</strong> <span id="detailScope"></span></div>
+                             <div><strong class="text-gray-600">Vigencia:</strong> <span id="detailStatus"></span></div>
+                             <div class="md:col-span-2"><strong class="text-gray-600">Palabras Clave:</strong> <span id="detailUserKeywords" class="text-kumera-600 font-medium"></span></div>
+                         </div>
+                         <div class="mb-6">
+                            <h4 class="font-semibold text-gray-700">Observaciones:</h4>
+                            <p id="detailObservations" class="text-sm text-gray-700 bg-gray-100 p-3.5 rounded-lg min-h-[60px] border"></p>
+                         </div>
+                        <div class="mb-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-semibold text-gray-700">Previsualización del Documento</h4>
+                                <a id="detailOpenDriveLink" href="#" target="_blank" class="text-sm text-blue-600 hover:underline flex items-center hidden">
+                                    Abrir en Drive
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                </a>
+                            </div>
+                            <div id="pdfPreviewContainer" class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 min-h-[500px] shadow-inner">
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end space-x-3 pt-5 border-t border-gray-200 mt-6">
+                            <button id="detailEditBtn" data-id="" class="bg-kumera-500 hover:bg-kumera-600 text-white font-semibold py-2.5 px-5 rounded-lg">Editar</button>
+                            <button id="detailDeleteBtn" data-id="" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-5 rounded-lg">Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="userAdminView" class="hidden">
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-200">
+                        <h2 class="text-3xl font-bold text-inst-dark mb-6 border-b pb-4">Administrar Usuarios</h2>
+                        <div class="mb-8">
+                            <h3 class="text-xl font-semibold text-inst-dark mb-4">Crear Usuario</h3>
+                            <form id="userAdminForm" class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                                <div>
+                                    <label for="userAdminFirstName" class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                                    <input type="text" id="userAdminFirstName" class="w-full px-4 py-2.5 border rounded-lg" required>
+                                </div>
+                                <div>
+                                    <label for="userAdminLastName" class="block text-sm font-medium text-gray-700 mb-1">Apellido</label>
+                                    <input type="text" id="userAdminLastName" class="w-full px-4 py-2.5 border rounded-lg" required>
+                                </div>
+                                <div>
+                                    <label for="userAdminPassword" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                                    <input type="password" id="userAdminPassword" class="w-full px-4 py-2.5 border rounded-lg" required>
+                                </div>
+                                <div>
+                                    <label for="userAdminRole" class="block text-sm font-medium text-gray-700 mb-1">Rol</label>
+                                    <select id="userAdminRole" class="w-full px-4 py-2.5 border rounded-lg bg-white" required>
+                                        <option value="user">Usuario</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                </div>
+                                <button type="submit" id="createUserBtn" class="md:col-span-2 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg">Crear</button>
+                            </form>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold text-inst-dark mb-4">Usuarios Existentes</h3>
+                            <div class="overflow-x-auto border rounded-lg">
+                                <table class="min-w-full divide-y">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Nombre Completo</th>
+                                            <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Rol</th>
+                                            <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="userTableBody" class="divide-y bg-white"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="createIncidentView" class="hidden">
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl max-w-3xl mx-auto border">
+                        <h2 class="text-2xl font-semibold text-inst-dark mb-8 border-b pb-4">Reportar Incidente</h2>
+                        <form id="incidentForm" class="space-y-6">
+                            <div>
+                                <label for="incidentTitle" class="block text-sm font-medium mb-1">Título</label>
+                                <input type="text" id="incidentTitle" class="w-full px-4 py-2.5 border rounded-lg" required>
+                            </div>
+                            <div>
+                                <label for="incidentDescription" class="block text-sm font-medium mb-1">Descripción</label>
+                                <textarea id="incidentDescription" rows="5" class="w-full px-4 py-2.5 border rounded-lg" required></textarea>
+                            </div>
+                            <div class="flex items-center justify-end space-x-3 pt-5 border-t mt-6">
+                                <button type="button" id="cancelIncidentBtn" class="bg-gray-200 hover:bg-gray-300 font-semibold py-2.5 px-5 rounded-lg">Cancelar</button>
+                                <button type="submit" id="saveIncidentBtn" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-5 rounded-lg">Reportar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modales -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[100] p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-kumera-500">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Notificación</h3>
+            <p id="modalMessage" class="text-sm text-gray-600"></p>
+            <div class="mt-6 text-right">
+                <button id="modalCloseButton" type="button" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    <div id="confirmationModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-yellow-500">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Confirmar Acción</h3>
+            <p id="confirmationModalMessage" class="text-sm text-gray-600"></p>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="cancelConfirmBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button id="confirmBtn" type="button" class="px-5 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
