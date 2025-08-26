@@ -74,7 +74,7 @@
             background-color: #ad9645 !important; /* kumera-500 */
             color: #FFFFFF !important;
         }
-        .active-filter svg {
+        .active-filter svg, .active-filter .custom-icon {
             color: #FFFFFF !important;
         }
 
@@ -86,6 +86,12 @@
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+        .custom-icon {
+            font-size: 1.25rem;
+            line-height: 1;
+            width: 1.25rem;
+            text-align: center;
         }
     </style>
     <script type="module">
@@ -107,7 +113,7 @@
         let app, db;
         let userRole = null;
         let userId = null;
-        let currentUserDocId = null; // **NUEVO**: Para guardar el ID del documento del usuario
+        let currentUserDocId = null; 
         const ADMIN_USER = '36219951';
         const ADMIN_PASSWORD = 'Marquitos123';
 
@@ -265,7 +271,7 @@
             const loginSuccess = (user) => {
                 userRole = user.role;
                 userId = user.id;
-                currentUserDocId = user.docId; // **NUEVO**: Guarda el ID del documento del usuario
+                currentUserDocId = user.docId;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 updateUserUI(user);
@@ -541,8 +547,8 @@
                         <td class="py-2 px-3">${userData.dni || 'N/A'}</td>
                         <td class="py-2 px-3">${userData.role}</td>
                         <td class="py-2 px-3 whitespace-nowrap">
-                            <button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7h3a5 5 0 015 5v14a5 5 0 01-5 5h-3a2 2 0 01-2-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 01-2 2H2a5 5 0 01-5-5V7a5 5 0 015-5h3a2 2 0 012 2v3a2 2 0 002 2h4a2 2 0 002-2v-3a2 2 0 012-2z" /></svg></button>
-                            <button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292m0 5.292a4 4 0 110 5.292M21 21L15 15" /></svg></button>
+                            <button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><span class="custom-icon">◪</span></button>
+                            <button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><span class="custom-icon">⇔</span></button>
                             <button data-id="${doc.id}" class="delete-user-btn text-red-600 hover:text-red-800 p-1 rounded" title="Eliminar Usuario"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                         </td>`;
                     userTableBody.appendChild(tr);
@@ -607,7 +613,7 @@
                 const userData = userDoc.data();
 
                 if (userData.password === password) {
-                    loginSuccess({id: userDoc.id, ...userData});
+                    loginSuccess({docId: userDoc.id, ...userData});
                 } else {
                     loginMessage.textContent = 'Usuario o contraseña incorrectos.';
                     loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
@@ -746,6 +752,11 @@
                     changePasswordMessage.classList.remove('hidden');
                     return;
                 }
+                
+                if (!currentUserDocId) {
+                    showModal('La contraseña del administrador principal no se puede cambiar desde esta interfaz.');
+                    return;
+                }
 
                 try {
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
@@ -835,7 +846,7 @@
                         </a>
                         <div>
                             <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
-                                <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.496 2.132a1 1 0 00-.992 0L1.54 6.632V8.5A1.5 1.5 0 003 10v5.5a1.5 1.5 0 001.5 1.5h9a1.5 1.5 0 001.5-1.5V10a1.5 1.5 0 001.46-1.368V6.632l-7.964-4.5zM3 15.25V10h14v5.25A1.75 1.75 0 0115.25 17H4.75A1.75 1.75 0 013 15.25zM16 8H4V7.108l6-3.428 6 3.428V8z" clip-rule="evenodd" /><path d="M7.725 11.913l.743-.424a.5.5 0 01.532 0l.743.424a.5.5 0 00.532-.073L12 9.857V13H8V9.857l1.725 1.983a.5.5 0 00.532.073z" /></svg><span class="sidebar-text">Jurisprudencia</span></span>
+                                <span class="flex items-center"><span class="custom-icon mr-3 flex-shrink-0">▰</span><span class="sidebar-text">Jurisprudencia</span></span>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
@@ -872,7 +883,7 @@
                         <span class="sidebar-text">Reportar Incidente</span>
                     </a>
                     <button id="changePasswordBtn" class="w-full flex items-center justify-center space-x-2 bg-kumera-600 hover:bg-kumera-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.623 5.873M12 15a2 2 0 100-4 2 2 0 000 4z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2z" /></svg>
+                        <span class="custom-icon">↻</span>
                         <span class="sidebar-text">Cambiar Contraseña</span>
                     </button>
                     <button id="signOutBtn" class="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
