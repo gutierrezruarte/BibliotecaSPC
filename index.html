@@ -120,8 +120,7 @@
         // Variables de estado para filtros y edición
         let currentFilterCategory = null;
         let currentFilterSubcategory = null;
-        let currentEditingDocId = null;
-        let currentViewingDocId = null;
+        let currentFilterStatus = null; // **NUEVO**
         let unsubscribe; // Para manejar la escucha de Firestore
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -179,6 +178,7 @@
             const createIncidentBtn = document.getElementById('createIncidentBtn');
             const signOutBtn = document.getElementById('signOutBtn');
             const changePasswordBtn = document.getElementById('changePasswordBtn');
+            const draftsBtn = document.getElementById('draftsBtn');
             
             const userAdminForm = document.getElementById('userAdminForm');
             const incidentForm = document.getElementById('incidentForm');
@@ -260,11 +260,11 @@
                     signOutBtn.classList.remove('hidden');
                     changePasswordBtn.classList.remove('hidden');
                     if (user.role === 'admin') {
-                        [newFileBtn, adminUsersBtn, createIncidentBtn].forEach(el => el.classList.remove('hidden'));
+                        [newFileBtn, adminUsersBtn, createIncidentBtn, draftsBtn].forEach(el => el.classList.remove('hidden'));
                     }
                 } else {
                     authStatusDiv.textContent = 'No Autenticado';
-                    [newFileBtn, adminUsersBtn, signOutBtn, createIncidentBtn, changePasswordBtn].forEach(el => el.classList.add('hidden'));
+                    [newFileBtn, adminUsersBtn, signOutBtn, createIncidentBtn, changePasswordBtn, draftsBtn].forEach(el => el.classList.add('hidden'));
                 }
             }
 
@@ -384,6 +384,9 @@
                 }
                 if (currentFilterSubcategory) {
                     constraints.push(where("subcategory", "==", currentFilterSubcategory));
+                }
+                if (currentFilterStatus) {
+                    constraints.push(where("status", "==", currentFilterStatus));
                 }
                 
                 if (constraints.length === 0) {
@@ -658,9 +661,21 @@
                 clickedItem.classList.add('active-filter');
                 currentFilterCategory = clickedItem.dataset.mainCategory === 'Todos' ? null : clickedItem.dataset.mainCategory;
                 currentFilterSubcategory = clickedItem.dataset.subcategory || null;
+                currentFilterStatus = null; // Reset status filter
                 loadDocuments();
                 showView('list');
             }));
+            
+            draftsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('.sidebar-filter-item').forEach(i => i.classList.remove('active-filter'));
+                draftsBtn.classList.add('active-filter');
+                currentFilterCategory = null;
+                currentFilterSubcategory = null;
+                currentFilterStatus = "Borrador";
+                loadDocuments();
+                showView('list');
+            });
 
             document.querySelectorAll('.collapsible-trigger').forEach(trigger => trigger.addEventListener('click', () => {
                 const content = document.getElementById(trigger.dataset.target);
@@ -812,6 +827,10 @@
                         <button id="newFileBtn" class="w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                             <span class="sidebar-text">Nuevo Archivo</span>
+                        </button>
+                        <button id="draftsBtn" class="w-full flex items-center justify-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM4 8h5v2H4V8z" clip-rule="evenodd" /></svg>
+                            <span class="sidebar-text">Borradores</span>
                         </button>
                         <input type="text" id="searchInput" placeholder="Buscar..." class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-kumera-500 border-gray-600 shadow">
                     </div>
