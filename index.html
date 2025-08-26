@@ -171,6 +171,7 @@
             const adminUsersBtn = document.getElementById('adminUsersBtn');
             const createIncidentBtn = document.getElementById('createIncidentBtn');
             const signOutBtn = document.getElementById('signOutBtn');
+            const changePasswordBtn = document.getElementById('changePasswordBtn');
             
             const userAdminForm = document.getElementById('userAdminForm');
             const incidentForm = document.getElementById('incidentForm');
@@ -185,6 +186,13 @@
             const confirmBtn = document.getElementById('confirmBtn');
             const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
             let confirmCallback = null;
+
+            const changePasswordModal = document.getElementById('changePasswordModal');
+            const changePasswordForm = document.getElementById('changePasswordForm');
+            const newPasswordInput = document.getElementById('newPassword');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+            const changePasswordMessage = document.getElementById('changePasswordMessage');
+            const cancelChangePasswordBtn = document.getElementById('cancelChangePasswordBtn');
             
             const subcategoryMap = {
                 "Legislación": ["Tratados Internacionales", "Constitución Nacional", "Leyes Nacionales", "Códigos", "Decretos Nacionales", "Constitución Provincial", "Leyes Provinciales", "Decretos Provinciales", "Resoluciones Ministeriales"],
@@ -563,10 +571,31 @@
             }
 
             // --- Event Listeners ---
-            loginForm.addEventListener('submit', (e) => {
+            loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                if (loginUsernameInput.value === ADMIN_USER && loginPasswordInput.value === ADMIN_PASSWORD) {
+                const username = loginUsernameInput.value;
+                const password = loginPasswordInput.value;
+
+                if (username === ADMIN_USER && password === ADMIN_PASSWORD) {
                     loginSuccess({role: 'admin', id: ADMIN_USER});
+                    return;
+                }
+                
+                const q = query(collection(db, `artifacts/${appId}/public/data/users`), where("dni", "==", username));
+                const snapshot = await getDocs(q);
+
+                if (snapshot.empty) {
+                    loginMessage.textContent = 'Usuario o contraseña incorrectos.';
+                    loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                    loginMessage.classList.remove('hidden');
+                    return;
+                }
+
+                const userDoc = snapshot.docs[0];
+                const userData = userDoc.data();
+
+                if (userData.password === password) {
+                    loginSuccess({id: userDoc.id, ...userData});
                 } else {
                     loginMessage.textContent = 'Usuario o contraseña incorrectos.';
                     loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
@@ -674,6 +703,47 @@
                     formPdfPreview.innerHTML = `<iframe src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
                 } else {
                     formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg"><p>Enlace de Drive no válido para previsualización.</p></div>`;
+                }
+            });
+
+            changePasswordBtn.addEventListener('click', () => {
+                changePasswordModal.classList.remove('hidden');
+            });
+
+            cancelChangePasswordBtn.addEventListener('click', () => {
+                changePasswordModal.classList.add('hidden');
+                changePasswordForm.reset();
+                changePasswordMessage.classList.add('hidden');
+            });
+
+            changePasswordForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const newPassword = newPasswordInput.value;
+                const confirmPassword = confirmPasswordInput.value;
+
+                if (newPassword !== confirmPassword) {
+                    changePasswordMessage.textContent = 'Las contraseñas no coinciden.';
+                    changePasswordMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                    changePasswordMessage.classList.remove('hidden');
+                    return;
+                }
+
+                if (newPassword.length < 6) {
+                    changePasswordMessage.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+                    changePasswordMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                    changePasswordMessage.classList.remove('hidden');
+                    return;
+                }
+
+                try {
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                    await updateDoc(userRef, { password: newPassword });
+                    showModal('Contraseña actualizada correctamente.');
+                    changePasswordModal.classList.add('hidden');
+                    changePasswordForm.reset();
+                } catch (error) {
+                    console.error("Error al cambiar la contraseña:", error);
+                    showModal(`Error al cambiar la contraseña: ${error.message}`);
                 }
             });
         });
@@ -789,6 +859,10 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                         <span class="sidebar-text">Reportar Incidente</span>
                     </a>
+                    <button id="changePasswordBtn" class="w-full flex items-center justify-center space-x-2 bg-kumera-600 hover:bg-kumera-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.623 5.873M12 15a2 2 0 100-4 2 2 0 000 4z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2z" /></svg>
+                        <span class="sidebar-text">Cambiar Contraseña</span>
+                    </button>
                     <button id="signOutBtn" class="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>
                         <span class="sidebar-text">Cerrar Sesión</span>
@@ -1041,6 +1115,26 @@
                 <button id="cancelConfirmBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
                 <button id="confirmBtn" type="button" class="px-5 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700">Confirmar</button>
             </div>
+        </div>
+    </div>
+    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-kumera-500">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Cambiar Contraseña</h3>
+            <form id="changePasswordForm" class="space-y-4">
+                <div>
+                    <label for="newPassword" class="block text-sm font-medium text-gray-700">Nueva Contraseña</label>
+                    <input type="password" id="newPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
+                </div>
+                <div>
+                    <label for="confirmPassword" class="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
+                    <input type="password" id="confirmPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
+                </div>
+                <div id="changePasswordMessage" class="hidden"></div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button id="cancelChangePasswordBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Guardar</button>
+                </div>
+            </form>
         </div>
     </div>
 </body>
