@@ -121,6 +121,8 @@
         let currentFilterCategory = null;
         let currentFilterSubcategory = null;
         let currentFilterStatus = null;
+        let currentEditingDocId = null;
+        let currentViewingDocId = null;
         let unsubscribe; // Para manejar la escucha de Firestore
 
         document.addEventListener('DOMContentLoaded', async () => {
