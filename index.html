@@ -107,6 +107,7 @@
         let app, db;
         let userRole = null;
         let userId = null;
+        let currentUserDocId = null; // **NUEVO**: Para guardar el ID del documento del usuario
         const ADMIN_USER = '36219951';
         const ADMIN_PASSWORD = 'Marquitos123';
 
@@ -247,17 +248,27 @@
                 confirmationModal.classList.remove('hidden');
             }
 
-            function toggleAdminControls(isAdmin) {
-                [newFileBtn, adminUsersBtn, signOutBtn, createIncidentBtn].forEach(el => el.classList.toggle('hidden', !isAdmin));
-                authStatusDiv.textContent = isAdmin ? 'Autenticado como Administrador' : 'No Autenticado';
+            function updateUserUI(user) {
+                if (user) {
+                    authStatusDiv.textContent = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
+                    signOutBtn.classList.remove('hidden');
+                    changePasswordBtn.classList.remove('hidden');
+                    if (user.role === 'admin') {
+                        [newFileBtn, adminUsersBtn, createIncidentBtn].forEach(el => el.classList.remove('hidden'));
+                    }
+                } else {
+                    authStatusDiv.textContent = 'No Autenticado';
+                    [newFileBtn, adminUsersBtn, signOutBtn, createIncidentBtn, changePasswordBtn].forEach(el => el.classList.add('hidden'));
+                }
             }
 
             const loginSuccess = (user) => {
                 userRole = user.role;
                 userId = user.id;
+                currentUserDocId = user.docId; // **NUEVO**: Guarda el ID del documento del usuario
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
-                toggleAdminControls(userRole === 'admin');
+                updateUserUI(user);
                 showView('list');
                 loadDocuments();
             };
@@ -265,9 +276,10 @@
             const logout = () => {
                 userRole = null;
                 userId = null;
+                currentUserDocId = null;
                 loginView.classList.remove('hidden');
                 appContainer.classList.add('hidden');
-                toggleAdminControls(false);
+                updateUserUI(null);
                 documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Inicia sesión para ver los documentos.</td></tr>';
                 if (unsubscribe) unsubscribe();
             };
@@ -577,7 +589,7 @@
                 const password = loginPasswordInput.value;
 
                 if (username === ADMIN_USER && password === ADMIN_PASSWORD) {
-                    loginSuccess({role: 'admin', id: ADMIN_USER});
+                    loginSuccess({role: 'admin', id: ADMIN_USER, firstName: 'Administrador'});
                     return;
                 }
                 
@@ -736,7 +748,7 @@
                 }
 
                 try {
-                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
                     await updateDoc(userRef, { password: newPassword });
                     showModal('Contraseña actualizada correctamente.');
                     changePasswordModal.classList.add('hidden');
