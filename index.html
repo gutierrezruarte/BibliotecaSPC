@@ -122,8 +122,7 @@
 
         // --- Configuración de Gemini API ---
         const GEMINI_API_KEY = ""; // Dejar en blanco, se gestiona en el entorno de ejecución
-        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
-
+        
         const firebaseConfig = {
             apiKey: "AIzaSyCYxPVi2VV3LuCxpKr-YNdJ0zCUKPbkcLg",
             authDomain: "bibliotecaspc-45ed0.firebaseapp.com",
@@ -317,7 +316,9 @@
                     ---
                     
                     Responde únicamente con el objeto JSON.`;
-
+                    
+                    // FIX: Actualizada la URL de la API de Gemini al modelo especificado.
+                    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
                     const payload = { 
                         contents: [{ parts: [{ text: prompt }] }],
                         generationConfig: { responseMimeType: "application/json" }
