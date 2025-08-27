@@ -296,17 +296,17 @@
                 formLoadingIndicator.classList.remove('hidden');
                 
                 const fileName = document.getElementById('s_fileName').value.trim();
-                const pdfLink = document.getElementById('s_pdfLink').value.trim();
+                const pdfLinks = Array.from(pdfLinksContainer.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean);
 
-                if (!fileName || !pdfLink) {
-                    showModal('El nombre del archivo y el enlace al PDF son obligatorios.');
+                if (!fileName || pdfLinks.length === 0) {
+                    showModal('El nombre del archivo y al menos un enlace a PDF son obligatorios.');
                     formLoadingIndicator.classList.add('hidden');
                     return;
                 }
                 
                 const docData = {
                     fileName,
-                    pdfLink,
+                    pdfLinks,
                     category: categorySelect.value,
                     subcategory: subcategorySelect.disabled ? "" : subcategorySelect.value,
                     documentNumber: document.getElementById('s_documentNumber').value.trim(),
@@ -450,17 +450,28 @@
                         detailUserKeywords.textContent = (data.userKeywords || []).join(', ') || 'N/A';
                         detailObservations.textContent = data.observations || 'Sin observaciones.';
                         
-                        if (data.pdfLink) {
-                            detailOpenDriveLink.href = data.pdfLink;
+                        if (data.pdfLinks && data.pdfLinks.length > 0) {
+                            detailOpenDriveLink.href = data.pdfLinks[0];
                             detailOpenDriveLink.classList.remove('hidden');
-                        } else {
-                            detailOpenDriveLink.classList.add('hidden');
-                        }
-                        
-                        const embeddableLink = getEmbeddableDriveLink(data.pdfLink);
-                        if (embeddableLink !== 'about:blank') {
+                            
+                            pdfSelectorContainer.innerHTML = '';
+                            if (data.pdfLinks.length > 1) {
+                                data.pdfLinks.forEach((link, index) => {
+                                    const button = document.createElement('button');
+                                    button.textContent = index + 1;
+                                    button.className = 'px-3 py-1 border rounded-md';
+                                    button.onclick = () => {
+                                        const embeddableLink = getEmbeddableDriveLink(link);
+                                        pdfPreviewContainer.innerHTML = `<iframe src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
+                                    };
+                                    pdfSelectorContainer.appendChild(button);
+                                });
+                            }
+
+                            const embeddableLink = getEmbeddableDriveLink(data.pdfLinks[0]);
                             pdfPreviewContainer.innerHTML = `<iframe id="pdfPreviewFrame" src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
                         } else {
+                            detailOpenDriveLink.classList.add('hidden');
                             pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 <p>No hay vista previa disponible.</p>
@@ -495,7 +506,6 @@
                         formTitle.textContent = 'Editar Documento';
                         submitBtn.textContent = 'Actualizar Documento';
                         
-                        document.getElementById('s_pdfLink').value = data.pdfLink || '';
                         document.getElementById('s_fileName').value = data.fileName || '';
                         categorySelect.value = data.category || '';
                         categorySelect.dispatchEvent(new Event('change'));
