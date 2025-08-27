@@ -225,12 +225,14 @@
             function getEmbeddableDriveLink(url) {
                 if (!url || typeof url !== 'string') return 'about:blank';
                 let fileId = null;
+                // Expresión regular mejorada para capturar IDs de URLs de Drive
                 const regex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
                 const match = url.match(regex);
                 if (match && match[1]) {
                     fileId = match[1];
                     return `https://drive.google.com/file/d/${fileId}/preview`;
                 }
+                // Si la URL ya es de previsualización, la devuelve directamente
                 if (url.includes('/preview')) {
                     return url;
                 }
@@ -296,17 +298,18 @@
                 formLoadingIndicator.classList.remove('hidden');
                 
                 const fileName = document.getElementById('s_fileName').value.trim();
-                const pdfLinks = Array.from(pdfLinksContainer.querySelectorAll('input')).map(input => input.value.trim()).filter(Boolean);
+                // CORREGIDO: Se lee el valor del único campo de enlace PDF
+                const pdfLink = pdfLinkInput.value.trim();
 
-                if (!fileName || pdfLinks.length === 0) {
-                    showModal('El nombre del archivo y al menos un enlace a PDF son obligatorios.');
+                if (!fileName || !pdfLink) {
+                    showModal('El nombre del archivo y el enlace a PDF son obligatorios.');
                     formLoadingIndicator.classList.add('hidden');
                     return;
                 }
                 
                 const docData = {
                     fileName,
-                    pdfLinks,
+                    pdfLink, // CORREGIDO: Se guarda un solo enlace como string
                     category: categorySelect.value,
                     subcategory: subcategorySelect.disabled ? "" : subcategorySelect.value,
                     documentNumber: document.getElementById('s_documentNumber').value.trim(),
@@ -379,7 +382,6 @@
 
                 const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
                 
-                let q;
                 const constraints = [];
                 if (currentFilterCategory) {
                     constraints.push(where("category", "==", currentFilterCategory));
@@ -391,21 +393,16 @@
                     constraints.push(where("status", "==", currentFilterStatus));
                 }
                 
-                if (constraints.length === 0) {
-                    constraints.push(orderBy("timestamp", "desc"));
-                }
-                
+                // CORREGIDO: Se ordena por fecha siempre para mantener consistencia.
+                // Esto puede requerir crear índices en Firestore. La consola de Firebase te guiará.
+                constraints.push(orderBy("timestamp", "desc"));
                 constraints.push(limit(50));
                 
-                q = query(filesCollectionRef, ...constraints);
+                const q = query(filesCollectionRef, ...constraints);
 
                 unsubscribe = onSnapshot(q, (snapshot) => {
                     let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    if (constraints.length > 1) { // Si hay filtros, ordena en el cliente
-                        docs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    }
-
                     const searchTerm = searchInput.value.toLowerCase();
                     if (searchTerm) {
                         docs = docs.filter(doc => 
@@ -413,19 +410,20 @@
                         );
                     }
                     
-                    documentsTableBody.innerHTML = ''; // Limpia la tabla antes de renderizar
-                    docs.forEach(docData => {
-                        const newRow = createTableRow(docData);
-                        documentsTableBody.appendChild(newRow);
-                    });
-
-                    if (documentsTableBody.children.length === 0) {
-                        documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No se encontraron documentos.</td></tr>';
+                    documentsTableBody.innerHTML = '';
+                    if (docs.length > 0) {
+                        docs.forEach(docData => {
+                            const newRow = createTableRow(docData);
+                            documentsTableBody.appendChild(newRow);
+                        });
+                    } else {
+                        documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No se encontraron documentos con los filtros aplicados.</td></tr>';
                     }
                     loadingIndicator.classList.add('hidden');
                 }, (error) => {
-                    console.error("Error al obtener documentos:", error);
-                    showModal(`Error al cargar documentos: ${error.message}`);
+                    console.error("Error al obtener documentos (es posible que falte un índice de Firestore):", error);
+                    showModal(`Error al cargar documentos. Puede que se requiera una configuración adicional en la base de datos. Detalles: ${error.message}`);
+                    documentsTableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">Error al cargar datos. Revise la consola para más detalles.</td></tr>`;
                     loadingIndicator.classList.add('hidden');
                 });
             }
@@ -450,32 +448,26 @@
                         detailUserKeywords.textContent = (data.userKeywords || []).join(', ') || 'N/A';
                         detailObservations.textContent = data.observations || 'Sin observaciones.';
                         
-                        if (data.pdfLinks && data.pdfLinks.length > 0) {
-                            detailOpenDriveLink.href = data.pdfLinks[0];
-                            detailOpenDriveLink.classList.remove('hidden');
-                            
-                            pdfSelectorContainer.innerHTML = '';
-                            if (data.pdfLinks.length > 1) {
-                                data.pdfLinks.forEach((link, index) => {
-                                    const button = document.createElement('button');
-                                    button.textContent = index + 1;
-                                    button.className = 'px-3 py-1 border rounded-md';
-                                    button.onclick = () => {
-                                        const embeddableLink = getEmbeddableDriveLink(link);
-                                        pdfPreviewContainer.innerHTML = `<iframe src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
-                                    };
-                                    pdfSelectorContainer.appendChild(button);
-                                });
-                            }
+                        // CORREGIDO: Lógica para manejar un solo enlace (pdfLink) y con retrocompatibilidad para (pdfLinks)
+                        const pdfLinkToShow = data.pdfLink || (Array.isArray(data.pdfLinks) && data.pdfLinks[0]);
 
-                            const embeddableLink = getEmbeddableDriveLink(data.pdfLinks[0]);
-                            pdfPreviewContainer.innerHTML = `<iframe id="pdfPreviewFrame" src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
+                        if (pdfLinkToShow) {
+                            detailOpenDriveLink.href = pdfLinkToShow;
+                            detailOpenDriveLink.classList.remove('hidden');
+                            const embeddableLink = getEmbeddableDriveLink(pdfLinkToShow);
+                            if (embeddableLink !== 'about:blank') {
+                                pdfPreviewContainer.innerHTML = `<iframe id="pdfPreviewFrame" src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
+                            } else {
+                                pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                    <p>Enlace de Drive no válido para previsualización.</p>
+                                </div>`;
+                            }
                         } else {
                             detailOpenDriveLink.classList.add('hidden');
                             pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                <p>No hay vista previa disponible.</p>
-                                <p class="text-xs">El enlace no es válido o no está configurado.</p>
+                                <p>No hay documento adjunto.</p>
                             </div>`;
                         }
 
@@ -509,7 +501,10 @@
                         document.getElementById('s_fileName').value = data.fileName || '';
                         categorySelect.value = data.category || '';
                         categorySelect.dispatchEvent(new Event('change'));
-                        subcategorySelect.value = data.subcategory || '';
+                        // Pequeña demora para asegurar que el submenú se pueble antes de seleccionar
+                        setTimeout(() => {
+                            subcategorySelect.value = data.subcategory || '';
+                        }, 100);
                         scopeSelect.value = data.scope || '';
                         statusSelect.value = data.status || 'Vigente';
                         document.getElementById('s_documentNumber').value = data.documentNumber || '';
@@ -517,6 +512,12 @@
                         document.getElementById('s_promulgationDate').value = data.promulgationDate || '';
                         userKeywordsInput.value = (data.userKeywords || []).join(', ');
                         observationsTextarea.value = data.observations || '';
+                        
+                        // CORREGIDO: Se rellena el campo del enlace PDF y se dispara el evento para la previsualización
+                        const pdfLinkToEdit = data.pdfLink || (Array.isArray(data.pdfLinks) && data.pdfLinks[0]);
+                        pdfLinkInput.value = pdfLinkToEdit || '';
+                        pdfLinkInput.dispatchEvent(new Event('blur'));
+
                         showView('form');
                     } else {
                         showModal('Documento no encontrado para editar.');
@@ -550,49 +551,29 @@
             async function renderUsers() {
                 if (userRole !== 'admin') return;
                 const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
-                const snapshot = await getDocs(usersCollectionRef);
-                userTableBody.innerHTML = '';
-                snapshot.forEach(doc => {
-                    const userData = doc.data();
-                    const tr = document.createElement('tr');
-                    tr.className = "border-b border-gray-200 hover:bg-gray-50 text-sm";
-                    const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.dni;
-                    tr.innerHTML = `
-                        <td class="py-2 px-3">${fullName}</td>
-                        <td class="py-2 px-3">${userData.dni || 'N/A'}</td>
-                        <td class="py-2 px-3">${userData.role}</td>
-                        <td class="py-2 px-3 whitespace-nowrap">
-                            <button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><span class="custom-icon">◪</span></button>
-                            <button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><span class="custom-icon">⇔</span></button>
-                            <button data-id="${doc.id}" class="delete-user-btn text-red-600 hover:text-red-800 p-1 rounded" title="Eliminar Usuario"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                        </td>`;
-                    userTableBody.appendChild(tr);
-                });
-                userTableBody.querySelectorAll('.reset-password-btn').forEach(btn => btn.addEventListener('click', (e) => {
-                    const userId = e.currentTarget.dataset.id;
-                    showConfirmationModal('¿Blanquear la contraseña de este usuario a "0000"?', async () => {
-                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { password: '0000' });
-                        showModal('Contraseña blanqueada.');
-                        renderUsers();
+                try {
+                    const snapshot = await getDocs(usersCollectionRef);
+                    userTableBody.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const userData = doc.data();
+                        const tr = document.createElement('tr');
+                        tr.className = "border-b border-gray-200 hover:bg-gray-50 text-sm";
+                        const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.dni;
+                        tr.innerHTML = `
+                            <td class="py-2 px-3">${fullName}</td>
+                            <td class="py-2 px-3">${userData.dni || 'N/A'}</td>
+                            <td class="py-2 px-3">${userData.role}</td>
+                            <td class="py-2 px-3 whitespace-nowrap">
+                                <button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><span class="custom-icon">◪</span></button>
+                                <button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><span class="custom-icon">⇔</span></button>
+                                <button data-id="${doc.id}" class="delete-user-btn text-red-600 hover:text-red-800 p-1 rounded" title="Eliminar Usuario"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            </td>`;
+                        userTableBody.appendChild(tr);
                     });
-                }));
-                userTableBody.querySelectorAll('.toggle-role-btn').forEach(btn => btn.addEventListener('click', (e) => {
-                    const userId = e.currentTarget.dataset.id;
-                    const newRole = e.currentTarget.dataset.role === 'admin' ? 'user' : 'admin';
-                    showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
-                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { role: newRole });
-                        showModal('Rol de usuario cambiado.');
-                        renderUsers();
-                    });
-                }));
-                 userTableBody.querySelectorAll('.delete-user-btn').forEach(btn => btn.addEventListener('click', (e) => {
-                    const userId = e.currentTarget.dataset.id;
-                    showConfirmationModal('¿Está seguro de que desea eliminar este usuario?', async () => {
-                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userId));
-                        showModal('Usuario eliminado.');
-                        renderUsers();
-                    });
-                }));
+                } catch(error) {
+                    console.error("Error renderizando usuarios:", error);
+                    userTableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">Error al cargar usuarios.</td></tr>`;
+                }
             }
             
             function debounce(func, delay) {
@@ -614,23 +595,30 @@
                     return;
                 }
                 
-                const q = query(collection(db, `artifacts/${appId}/public/data/users`), where("dni", "==", username));
-                const snapshot = await getDocs(q);
+                try {
+                    const q = query(collection(db, `artifacts/${appId}/public/data/users`), where("dni", "==", username));
+                    const snapshot = await getDocs(q);
 
-                if (snapshot.empty) {
-                    loginMessage.textContent = 'Usuario o contraseña incorrectos.';
-                    loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
-                    loginMessage.classList.remove('hidden');
-                    return;
-                }
+                    if (snapshot.empty) {
+                        loginMessage.textContent = 'Usuario o contraseña incorrectos.';
+                        loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                        loginMessage.classList.remove('hidden');
+                        return;
+                    }
 
-                const userDoc = snapshot.docs[0];
-                const userData = userDoc.data();
+                    const userDoc = snapshot.docs[0];
+                    const userData = userDoc.data();
 
-                if (userData.password === password) {
-                    loginSuccess({docId: userDoc.id, ...userData});
-                } else {
-                    loginMessage.textContent = 'Usuario o contraseña incorrectos.';
+                    if (userData.password === password) {
+                        loginSuccess({docId: userDoc.id, ...userData});
+                    } else {
+                        loginMessage.textContent = 'Usuario o contraseña incorrectos.';
+                        loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                        loginMessage.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error("Error de login:", error);
+                    loginMessage.textContent = 'Error al intentar iniciar sesión. Verifique la conexión.';
                     loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
                     loginMessage.classList.remove('hidden');
                 }
@@ -640,6 +628,7 @@
             newFileBtn.addEventListener('click', () => {
                 currentEditingDocId = null;
                 uploadForm.reset();
+                pdfLinkInput.dispatchEvent(new Event('blur')); // Limpia la previsualización
                 formTitle.textContent = 'Cargar Nuevo Documento';
                 submitBtn.textContent = 'Guardar Documento';
                 showView('form');
@@ -669,11 +658,11 @@
             document.querySelectorAll('.sidebar-filter-item').forEach(item => item.addEventListener('click', (e) => {
                 e.preventDefault();
                 const clickedItem = e.currentTarget;
-                document.querySelectorAll('.sidebar-filter-item').forEach(i => i.classList.remove('active-filter'));
+                document.querySelectorAll('.sidebar-filter-item, #draftsBtn').forEach(i => i.classList.remove('active-filter'));
                 clickedItem.classList.add('active-filter');
                 currentFilterCategory = clickedItem.dataset.mainCategory === 'Todos' ? null : clickedItem.dataset.mainCategory;
                 currentFilterSubcategory = clickedItem.dataset.subcategory || null;
-                currentFilterStatus = null; // Reset status filter
+                currentFilterStatus = null;
                 loadDocuments();
                 showView('list');
             }));
@@ -747,7 +736,7 @@
                 if(embeddableLink !== 'about:blank') {
                     formPdfPreview.innerHTML = `<iframe src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
                 } else {
-                    formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg"><p>Enlace de Drive no válido para previsualización.</p></div>`;
+                    formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><p>Enlace de Drive no válido para previsualización. Asegúrate de que sea un enlace de archivo compartido.</p></div>`;
                 }
             });
 
@@ -796,6 +785,35 @@
                     showModal(`Error al cambiar la contraseña: ${error.message}`);
                 }
             });
+
+            // Agrega los listeners a los botones de acciones de usuario después de que se renderizan
+            userTableBody.addEventListener('click', async (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
+
+                const userId = target.dataset.id;
+                if (target.classList.contains('reset-password-btn')) {
+                    showConfirmationModal('¿Blanquear la contraseña de este usuario a "0000"?', async () => {
+                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { password: '0000' });
+                        showModal('Contraseña blanqueada.');
+                        renderUsers();
+                    });
+                } else if (target.classList.contains('toggle-role-btn')) {
+                    const newRole = target.dataset.role === 'admin' ? 'user' : 'admin';
+                    showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
+                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { role: newRole });
+                        showModal('Rol de usuario cambiado.');
+                        renderUsers();
+                    });
+                } else if (target.classList.contains('delete-user-btn')) {
+                    showConfirmationModal('¿Está seguro de que desea eliminar este usuario?', async () => {
+                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userId));
+                        showModal('Usuario eliminado.');
+                        renderUsers();
+                    });
+                }
+            });
+
         });
     </script>
 </head>
@@ -828,7 +846,7 @@
         <div class="flex h-screen overflow-hidden">
             <!-- Barra Lateral (Sidebar) -->
             <aside id="sidebar" class="w-72 bg-inst-dark text-inst-text-dark p-4 flex flex-col space-y-2 shadow-lg z-20">
-                <div id="sidebar-content">
+                <div id="sidebar-content" class="flex-1 flex flex-col min-h-0">
                     <div class="text-center mb-2 pt-2">
                         <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-3 h-20 w-20 object-contain" onerror="this.src='https://placehold.co/80x80/111827/FFFFFF?text=Escudo';">
                         <h1 class="text-xl font-semibold text-kumera-400 sidebar-text">Biblioteca Institucional</h1>
@@ -847,7 +865,7 @@
                         <input type="text" id="searchInput" placeholder="Buscar..." class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-kumera-500 border-gray-600 shadow">
                     </div>
                     
-                    <nav class="flex-1 space-y-1 px-2 overflow-y-auto">
+                    <nav class="flex-1 space-y-1 px-2 overflow-y-auto mt-4">
                         <a href="#" class="sidebar-filter-item active-filter group" data-main-category="Todos">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                             <span class="sidebar-text">Todos</span>
@@ -963,7 +981,7 @@
                                  <input type="url" id="s_pdfLink" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-kumera-500" placeholder="https://drive.google.com/file/d/...">
                                  <p class="text-xs text-gray-500 mt-1">Asegúrate de que el archivo sea público ("Cualquier persona con el enlace").</p>
                              </div>
-                             <div id="formPdfPreview" class="border-2 border-dashed border-gray-300 rounded-lg min-h-[200px] mt-4"></div>
+                             <div id="formPdfPreview" class="border-2 border-dashed border-gray-300 rounded-lg min-h-[200px] mt-4 bg-gray-50"></div>
                              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 border-t pt-6">
                                  <div>
                                      <label for="s_fileName" class="block text-sm font-medium text-gray-700 mb-1">Nombre del Archivo <span class="text-red-500">*</span></label>
