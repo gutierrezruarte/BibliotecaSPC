@@ -420,10 +420,10 @@
                             const data = doc.data();
                             const embedLink = getEmbeddableDriveLink(data.pdfLink);
                             dailyDocsContainer.innerHTML += `
-                                <div class="mb-6 bg-white p-4 rounded-lg shadow border">
-                                    <h4 class="font-bold text-lg text-inst-dark">${data.fileName}</h4>
-                                    <a href="${data.pdfLink}" target="_blank" class="text-sm text-blue-600 hover:underline mb-2 block">Abrir en Drive</a>
-                                    <div class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 h-96 shadow-inner">
+                                <div class="bg-white p-4 rounded-lg shadow border flex flex-col flex-grow min-h-0">
+                                    <h4 class="font-bold text-lg text-inst-dark flex-shrink-0">${data.fileName}</h4>
+                                    <a href="${data.pdfLink}" target="_blank" class="text-sm text-blue-600 hover:underline mb-2 block flex-shrink-0">Abrir en Drive</a>
+                                    <div class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 shadow-inner flex-grow">
                                         <iframe src="${embedLink}" class="w-full h-full"></iframe>
                                     </div>
                                 </div>
@@ -1118,26 +1118,26 @@
                 <!-- Nueva Vista de Órdenes Internas -->
                 <div id="ordenesInternasView" class="hidden">
                      <h2 class="text-3xl font-bold text-inst-dark mb-4">Órdenes del Día</h2>
-                     <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-                        <div class="flex items-center justify-between mb-4 pb-4 border-b">
+                     <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col h-[85vh]">
+                        <div class="flex items-center justify-between mb-4 pb-4 border-b flex-shrink-0">
                             <button id="prevMonthBtn" class="p-2 rounded-full hover:bg-kumera-100">&lt;</button>
                             <h3 id="currentMonthYear" class="text-xl font-semibold text-inst-dark"></h3>
                             <button id="nextMonthBtn" class="p-2 rounded-full hover:bg-kumera-100">&gt;</button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <div class="grid grid-cols-7 gap-1 text-center font-semibold text-xs text-gray-500 mb-2">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow min-h-0">
+                            <div class="flex flex-col">
+                                <div class="grid grid-cols-7 gap-1 text-center font-semibold text-xs text-gray-500 mb-2 flex-shrink-0">
                                     <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
                                 </div>
-                                <div id="calendarGrid" class="grid grid-cols-7 gap-1">
+                                <div id="calendarGrid" class="grid grid-cols-7 gap-1 flex-grow">
                                     <!-- Días del calendario se generan aquí -->
                                 </div>
                             </div>
-                            <div id="dailyDocsContainer" class="border-l pl-6 overflow-y-auto max-h-[600px]">
+                            <div id="dailyDocsContainer" class="border-l pl-6 overflow-y-auto flex flex-col gap-4">
                                 <!-- Documentos del día seleccionado se muestran aquí -->
                             </div>
                         </div>
-                        <div id="calendarLoading" class="text-center py-4 hidden">
+                        <div id="calendarLoading" class="text-center py-4 hidden flex-shrink-0">
                             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-kumera-500 mx-auto"></div>
                         </div>
                      </div>
@@ -1368,4 +1368,4 @@
     </div>
 </body>
 </html>
-
+```eof
