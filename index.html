@@ -289,15 +289,8 @@
                 if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
                 if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
                 
-                // CORRECCIÓN DEL ÍNDICE:
-                // Si no hay filtros, podemos ordenar por timestamp en el servidor de forma segura.
-                // Si hay filtros, quitamos el orderBy para evitar el error de índice compuesto.
-                // La ordenación se manejará del lado del cliente al renderizar.
-                if (constraints.length === 0) {
-                    constraints.push(orderBy("timestamp", "desc"));
-                }
-                
-                constraints.push(limit(100));
+                constraints.push(orderBy("timestamp", "desc"));
+                constraints.push(limit(100)); // Aumentar límite para mejor filtrado/ordenamiento en cliente
                 
                 const q = query(filesCollectionRef, ...constraints);
 
@@ -317,12 +310,7 @@
                 tr.dataset.id = docData.id; 
                 tr.className = 'border-b border-gray-200 hover:bg-kumera-50 text-sm';
                 const keywords = (docData.userKeywords || []).join(', ');
-                
-                const canModify = userRole === 'admin' || docData.uploadedBy === userId;
-                const actionButtons = canModify ? `
-                    <button class="edit-btn text-kumera-600 hover:text-kumera-800 p-1 rounded" data-id="${docData.id}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
-                    <button class="delete-btn text-red-600 hover:text-red-800 p-1 rounded" data-id="${docData.id}" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
-                ` : '';
+                const canEdit = userRole === 'admin';
 
                 tr.innerHTML = `
                     <td class="py-2 px-3 text-inst-text-light font-medium">${docData.fileName}</td>
@@ -332,12 +320,14 @@
                     <td class="py-2 px-3 text-inst-text-light" title="${keywords}">${keywords.substring(0, 25)}${keywords.length > 25 ? '...' : ''}</td>
                     <td class="py-2 px-3 whitespace-nowrap">
                         <button class="view-btn text-sky-600 hover:text-sky-800 p-1 rounded" data-id="${docData.id}" title="Ver"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg></button>
-                        ${actionButtons}
+                        ${canEdit ? `
+                        <button class="edit-btn text-kumera-600 hover:text-kumera-800 p-1 rounded" data-id="${docData.id}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
+                        <button class="delete-btn text-red-600 hover:text-red-800 p-1 rounded" data-id="${docData.id}" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
+                        ` : ''}
                     </td>`;
-
                 // Añadir listeners a los botones de la fila
                 tr.querySelector('.view-btn').addEventListener('click', (e) => handleView(e.currentTarget.dataset.id));
-                 if (canModify) {
+                 if (canEdit) {
                     tr.querySelector('.edit-btn')?.addEventListener('click', (e) => handleEdit(e.currentTarget.dataset.id));
                     tr.querySelector('.delete-btn')?.addEventListener('click', (e) => handleDelete(e.currentTarget.dataset.id));
                 }
@@ -420,10 +410,10 @@
                             const data = doc.data();
                             const embedLink = getEmbeddableDriveLink(data.pdfLink);
                             dailyDocsContainer.innerHTML += `
-                                <div class="bg-white p-4 rounded-lg shadow border flex flex-col flex-grow min-h-0">
-                                    <h4 class="font-bold text-lg text-inst-dark flex-shrink-0">${data.fileName}</h4>
-                                    <a href="${data.pdfLink}" target="_blank" class="text-sm text-blue-600 hover:underline mb-2 block flex-shrink-0">Abrir en Drive</a>
-                                    <div class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 shadow-inner flex-grow">
+                                <div class="mb-6 bg-white p-4 rounded-lg shadow border">
+                                    <h4 class="font-bold text-lg text-inst-dark">${data.fileName}</h4>
+                                    <a href="${data.pdfLink}" target="_blank" class="text-sm text-blue-600 hover:underline mb-2 block">Abrir en Drive</a>
+                                    <div class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 h-96 shadow-inner">
                                         <iframe src="${embedLink}" class="w-full h-full"></iframe>
                                     </div>
                                 </div>
@@ -555,12 +545,15 @@
                     authStatusDiv.textContent = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
                     signOutBtn.classList.remove('hidden');
                     changePasswordBtn.classList.remove('hidden');
-
-                    if (user.role === 'admin' || user.role === 'asesor') {
-                        [newFileBtn, draftsBtn].forEach(el => el.classList.remove('hidden'));
-                    }
+                    
+                    // Lógica de visibilidad de botones por rol
                     if (user.role === 'admin') {
-                        adminUsersBtn.classList.remove('hidden');
+                        [newFileBtn, adminUsersBtn, draftsBtn].forEach(el => el.classList.remove('hidden'));
+                    } else if (user.role === 'asesor legal') {
+                        newFileBtn.classList.remove('hidden');
+                        [adminUsersBtn, draftsBtn].forEach(el => el.classList.add('hidden'));
+                    } else { // Rol 'user' u otros
+                         [newFileBtn, adminUsersBtn, draftsBtn].forEach(el => el.classList.add('hidden'));
                     }
                 } else {
                     authStatusDiv.textContent = 'No Autenticado';
@@ -569,7 +562,7 @@
             }
             const loginSuccess = (user) => {
                 userRole = user.role;
-                userId = user.id || user.dni; 
+                userId = user.id || user.dni; // CORRECCIÓN: Asegura que userId siempre tenga un valor (DNI del admin o del usuario)
                 currentUserDocId = user.docId;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
@@ -638,11 +631,6 @@
                         detailStatus.textContent = data.status || 'N/A';
                         detailUserKeywords.textContent = (data.userKeywords || []).join(', ') || 'N/A';
                         detailObservations.textContent = data.observations || 'Sin observaciones.';
-                        
-                        const canModify = userRole === 'admin' || data.uploadedBy === userId;
-                        detailEditBtn.style.display = canModify ? 'inline-flex' : 'none';
-                        detailDeleteBtn.style.display = canModify ? 'inline-flex' : 'none';
-
                         const pdfLinkToShow = data.pdfLink || (Array.isArray(data.pdfLinks) && data.pdfLinks[0]);
                         if (pdfLinkToShow) {
                             detailOpenDriveLink.href = pdfLinkToShow;
@@ -657,6 +645,16 @@
                             detailOpenDriveLink.classList.add('hidden');
                             pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><p>No hay documento adjunto.</p></div>`;
                         }
+
+                        // Ocultar o mostrar botones de acción en detalle según el rol
+                        if (userRole === 'admin') {
+                            detailDeleteBtn.classList.remove('hidden');
+                            detailEditBtn.classList.remove('hidden');
+                        } else {
+                            detailDeleteBtn.classList.add('hidden');
+                            detailEditBtn.classList.add('hidden');
+                        }
+
                         detailDeleteBtn.dataset.id = docId;
                         detailEditBtn.dataset.id = docId;
                         showView('detail');
@@ -672,18 +670,13 @@
                 }
             }
             async function handleEdit(docId) {
+                if (userRole !== 'admin') return;
                 loadingIndicator.classList.remove('hidden');
                 const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
                 try {
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        
-                        if (userRole !== 'admin' && data.uploadedBy !== userId) {
-                            showModal("No tienes permiso para editar este documento.");
-                            return;
-                        }
-                        
                         currentEditingDocId = docId;
                         formTitle.textContent = 'Editar Documento';
                         submitBtn.textContent = 'Actualizar Documento';
@@ -713,20 +706,11 @@
                 }
             }
             function handleDelete(docId) {
+                if (userRole !== 'admin') return;
                 showConfirmationModal('¿Está seguro de que desea eliminar este documento? Esta acción no se puede deshacer.', async () => {
                     loadingIndicator.classList.remove('hidden');
                     const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
                     try {
-                        // Re-verificar permiso antes de eliminar
-                        const docSnap = await getDoc(docRef);
-                        if(docSnap.exists()) {
-                            const data = docSnap.data();
-                            if (userRole !== 'admin' && data.uploadedBy !== userId) {
-                                showModal("No tienes permiso para eliminar este documento.");
-                                return;
-                            }
-                        }
-                        
                         await deleteDoc(docRef);
                         showModal('Documento eliminado correctamente.');
                         if (currentViewingDocId === docId) showView('list');
@@ -921,29 +905,34 @@
                 const target = e.target.closest('button');
                 if (!target) return;
                 const userId = target.dataset.id;
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                
                 if (target.classList.contains('reset-password-btn')) {
                     showConfirmationModal('¿Blanquear la contraseña de este usuario a "0000"?', async () => {
-                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { password: '0000' });
+                        await updateDoc(userDocRef, { password: '0000' });
                         showModal('Contraseña blanqueada.');
                         renderUsers();
                     });
                 } else if (target.classList.contains('toggle-role-btn')) {
-                    const currentRole = target.dataset.role;
+                    const userDocSnap = await getDoc(userDocRef);
+                    const currentRole = userDocSnap.data()?.role;
                     let newRole;
-                    switch (currentRole) {
-                        case 'user': newRole = 'asesor'; break;
-                        case 'asesor': newRole = 'admin'; break;
-                        case 'admin': newRole = 'user'; break;
-                        default: newRole = 'user';
+                    // Ciclo de roles: admin -> asesor legal -> user -> admin
+                    if (currentRole === 'admin') {
+                        newRole = 'asesor legal';
+                    } else if (currentRole === 'asesor legal') {
+                        newRole = 'user';
+                    } else { // user u otro
+                        newRole = 'admin';
                     }
-                    showConfirmationModal(`¿Cambiar el rol de "${currentRole}" a "${newRole}"?`, async () => {
-                        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { role: newRole });
+                    showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
+                        await updateDoc(userDocRef, { role: newRole });
                         showModal('Rol de usuario cambiado.');
                         renderUsers();
                     });
                 } else if (target.classList.contains('delete-user-btn')) {
                     showConfirmationModal('¿Está seguro de que desea eliminar este usuario?', async () => {
-                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/users`, userId));
+                        await deleteDoc(userDocRef);
                         showModal('Usuario eliminado.');
                         renderUsers();
                     });
@@ -1118,26 +1107,26 @@
                 <!-- Nueva Vista de Órdenes Internas -->
                 <div id="ordenesInternasView" class="hidden">
                      <h2 class="text-3xl font-bold text-inst-dark mb-4">Órdenes del Día</h2>
-                     <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col h-[85vh]">
-                        <div class="flex items-center justify-between mb-4 pb-4 border-b flex-shrink-0">
+                     <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                        <div class="flex items-center justify-between mb-4 pb-4 border-b">
                             <button id="prevMonthBtn" class="p-2 rounded-full hover:bg-kumera-100">&lt;</button>
                             <h3 id="currentMonthYear" class="text-xl font-semibold text-inst-dark"></h3>
                             <button id="nextMonthBtn" class="p-2 rounded-full hover:bg-kumera-100">&gt;</button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow min-h-0">
-                            <div class="flex flex-col">
-                                <div class="grid grid-cols-7 gap-1 text-center font-semibold text-xs text-gray-500 mb-2 flex-shrink-0">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <div class="grid grid-cols-7 gap-1 text-center font-semibold text-xs text-gray-500 mb-2">
                                     <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
                                 </div>
-                                <div id="calendarGrid" class="grid grid-cols-7 gap-1 flex-grow">
+                                <div id="calendarGrid" class="grid grid-cols-7 gap-1">
                                     <!-- Días del calendario se generan aquí -->
                                 </div>
                             </div>
-                            <div id="dailyDocsContainer" class="border-l pl-6 overflow-y-auto flex flex-col gap-4">
+                            <div id="dailyDocsContainer" class="border-l pl-6 overflow-y-auto max-h-[600px]">
                                 <!-- Documentos del día seleccionado se muestran aquí -->
                             </div>
                         </div>
-                        <div id="calendarLoading" class="text-center py-4 hidden flex-shrink-0">
+                        <div id="calendarLoading" class="text-center py-4 hidden">
                             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-kumera-500 mx-auto"></div>
                         </div>
                      </div>
@@ -1297,7 +1286,7 @@
                                     <label for="userAdminRole" class="block text-sm font-medium text-gray-700 mb-1">Rol</label>
                                     <select id="userAdminRole" class="w-full px-4 py-2.5 border rounded-lg bg-white" required>
                                         <option value="user">Usuario</option>
-                                        <option value="asesor">Asesor Legal</option>
+                                        <option value="asesor legal">Asesor Legal</option>
                                         <option value="admin">Admin</option>
                                     </select>
                                 </div>
@@ -1368,4 +1357,3 @@
     </div>
 </body>
 </html>
-```eof
