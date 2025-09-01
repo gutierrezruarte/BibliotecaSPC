@@ -928,8 +928,15 @@
                         renderUsers();
                     });
                 } else if (target.classList.contains('toggle-role-btn')) {
-                    const newRole = target.dataset.role === 'admin' ? 'user' : 'admin';
-                    showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
+                    const currentRole = target.dataset.role;
+                    let newRole;
+                    switch (currentRole) {
+                        case 'user': newRole = 'asesor'; break;
+                        case 'asesor': newRole = 'admin'; break;
+                        case 'admin': newRole = 'user'; break;
+                        default: newRole = 'user';
+                    }
+                    showConfirmationModal(`¿Cambiar el rol de "${currentRole}" a "${newRole}"?`, async () => {
                         await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), { role: newRole });
                         showModal('Rol de usuario cambiado.');
                         renderUsers();
