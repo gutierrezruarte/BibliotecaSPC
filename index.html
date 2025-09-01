@@ -146,7 +146,7 @@
             const documentFormView = document.getElementById('documentFormView');
             const documentDetailView = document.getElementById('documentDetailView');
             const userAdminView = document.getElementById('userAdminView');
-            const ordenesInternasView = document.getElementById('ordenesInternasView'); // Nueva vista
+            const ordenesInternasView = document.getElementById('ordenesInternasView');
             const loginView = document.getElementById('loginView');
             const appContainer = document.getElementById('appContainer');
             const loadingIndicator = document.getElementById('loadingIndicator');
@@ -172,6 +172,22 @@
             }
             
             // --- Funciones de la Aplicación ---
+
+            /**
+             * CORRECCIÓN DE FECHA: Corrige el problema de la zona horaria.
+             * El input type="date" devuelve "YYYY-MM-DD". new Date("YYYY-MM-DD") lo interpreta como medianoche UTC.
+             * En zonas horarias detrás de UTC (ej. Argentina, UTC-3), esto se convierte en el día anterior.
+             * Esta función ajusta la fecha a la medianoche local para mostrar siempre el día correcto.
+             * @param {string} d - La fecha en formato "YYYY-MM-DD".
+             * @returns {string} La fecha formateada para la región local o 'N/A'.
+             */
+            const formatDate = (d) => {
+                if (!d) return 'N/A';
+                const date = new Date(d);
+                const offset = date.getTimezoneOffset();
+                date.setMinutes(date.getMinutes() + offset);
+                return date.toLocaleDateString('es-ES');
+            };
             
             function getEmbeddableDriveLink(url) {
                 if (!url || typeof url !== 'string') return 'about:blank';
@@ -234,7 +250,7 @@
                         docsToRender = docsToRender.filter(doc => {
                             const docValue = String(doc[field] || '').toLowerCase();
                             if (field === 'sanctionDate' && doc.sanctionDate) {
-                                return new Date(doc.sanctionDate).toLocaleDateString('es-ES').includes(filterValue);
+                                return formatDate(doc.sanctionDate).includes(filterValue);
                             }
                             return docValue.includes(filterValue);
                         });
@@ -273,8 +289,15 @@
                 if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
                 if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
                 
-                constraints.push(orderBy("timestamp", "desc"));
-                constraints.push(limit(100)); // Aumentar límite para mejor filtrado/ordenamiento en cliente
+                // CORRECCIÓN DEL ÍNDICE:
+                // Si no hay filtros, podemos ordenar por timestamp en el servidor de forma segura.
+                // Si hay filtros, quitamos el orderBy para evitar el error de índice compuesto.
+                // La ordenación se manejará del lado del cliente al renderizar.
+                if (constraints.length === 0) {
+                    constraints.push(orderBy("timestamp", "desc"));
+                }
+                
+                constraints.push(limit(100));
                 
                 const q = query(filesCollectionRef, ...constraints);
 
@@ -293,7 +316,6 @@
                 const tr = document.createElement('tr');
                 tr.dataset.id = docData.id; 
                 tr.className = 'border-b border-gray-200 hover:bg-kumera-50 text-sm';
-                const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-ES') : 'N/A';
                 const keywords = (docData.userKeywords || []).join(', ');
                 tr.innerHTML = `
                     <td class="py-2 px-3 text-inst-text-light font-medium">${docData.fileName}</td>
@@ -538,7 +560,7 @@
             }
             const loginSuccess = (user) => {
                 userRole = user.role;
-                userId = user.id;
+                userId = user.id || user.dni; // CORRECCIÓN: Asegura que userId siempre tenga un valor (DNI del admin o del usuario)
                 currentUserDocId = user.docId;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
@@ -597,7 +619,6 @@
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-ES') : 'N/A';
                         detailFileName.textContent = data.fileName || 'N/A';
                         detailCategory.textContent = data.category || 'N/A';
                         detailSubcategory.textContent = data.subcategory || 'N/A';
@@ -1311,3 +1332,4 @@
     </div>
 </body>
 </html>
+
