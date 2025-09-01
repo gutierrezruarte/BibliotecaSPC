@@ -285,13 +285,14 @@
                 const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
                 
                 const constraints = [];
+                const isFiltering = currentFilterCategory || currentFilterSubcategory || currentFilterStatus;
+
                 if (currentFilterCategory) constraints.push(where("category", "==", currentFilterCategory));
                 if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
+                if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
                 
-                if (currentFilterStatus) {
-                    constraints.push(where("status", "==", currentFilterStatus));
-                } else {
-                    // Solo ordenar por timestamp si no se filtra por estado para evitar el error de índice compuesto.
+                // Solo agregar orderBy si no se aplican filtros para evitar errores de índice compuesto.
+                if (!isFiltering) {
                     constraints.push(orderBy("timestamp", "desc"));
                 }
                 
@@ -301,19 +302,9 @@
 
                 unsubscribe = onSnapshot(q, (snapshot) => {
                     allDocsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                    // Si se filtró por estado, el ordenamiento se hace en el cliente.
-                    if (currentFilterStatus) {
-                        allDocsCache.sort((a, b) => {
-                            const valA = a.timestamp || '';
-                            const valB = b.timestamp || '';
-                            if (valA < valB) return 1; // Para orden descendente
-                            if (valA > valB) return -1;
-                            return 0;
-                        });
-                    }
-
-                    renderDocuments(); // Renderizar con filtros y ordenamiento actual
+                    
+                    // La función renderDocuments se encargará de aplicar el ordenamiento correcto.
+                    renderDocuments();
                     loadingIndicator.classList.add('hidden');
                 }, (error) => {
                     console.error("Error al obtener documentos:", error);
@@ -1375,4 +1366,5 @@
     </div>
 </body>
 </html>
+
 
