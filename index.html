@@ -421,7 +421,17 @@
             function populateDateSelectors() {
                 const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
                 const currentYear = new Date().getFullYear();
-                const startYear = 2020;
+                let startYear = 2020; // Año de inicio por defecto
+
+                // Se busca el año más antiguo de los documentos en caché para crear un rango de fechas dinámico.
+                const ordenesDelDiaDocs = fullDocsCache
+                    .filter(doc => doc.subcategory === "Orden del Día" && doc.sanctionDate)
+                    .map(doc => new Date(doc.sanctionDate));
+
+                if (ordenesDelDiaDocs.length > 0) {
+                    const oldestDate = new Date(Math.min.apply(null, ordenesDelDiaDocs));
+                    startYear = oldestDate.getFullYear();
+                }
 
                 monthSelector.innerHTML = '';
                 months.forEach((month, index) => {
@@ -1597,5 +1607,6 @@
     </div>
 </body>
 </html>
+
 
 
