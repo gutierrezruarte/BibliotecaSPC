@@ -205,6 +205,8 @@
             const batchImportProgress = document.getElementById('batchImportProgress');
             const batchCategorySelect = document.getElementById('batchCategorySelect');
             const batchSubcategorySelect = document.getElementById('batchSubcategorySelect');
+            const batchMonthSelect = document.getElementById('batchMonthSelect');
+            const batchYearSelect = document.getElementById('batchYearSelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -690,6 +692,23 @@
                 batchCategorySelect.value = '';
                 batchSubcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
                 batchSubcategorySelect.disabled = true;
+                
+                // Poblar y resetear selectores de fecha
+                batchMonthSelect.innerHTML = '<option value="">Mes...</option>';
+                const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                months.forEach((month, index) => {
+                    batchMonthSelect.add(new Option(month, index));
+                });
+
+                batchYearSelect.innerHTML = '<option value="">Año...</option>';
+                const currentYear = new Date().getFullYear();
+                for (let year = currentYear + 1; year >= 1980; year--) {
+                    batchYearSelect.add(new Option(year, year));
+                }
+                
+                batchMonthSelect.value = '';
+                batchYearSelect.value = '';
+
                 confirmBatchImportBtn.disabled = false;
                 cancelBatchImportBtn.disabled = false;
             });
@@ -862,6 +881,14 @@
                 
                 const selectedCategory = batchCategorySelect.value;
                 const selectedSubcategory = batchSubcategorySelect.disabled ? "" : batchSubcategorySelect.value;
+                const selectedMonth = batchMonthSelect.value;
+                const selectedYear = batchYearSelect.value;
+                let sanctionDate = "";
+
+                if (selectedYear !== "" && selectedMonth !== "") {
+                    const monthStr = String(parseInt(selectedMonth, 10) + 1).padStart(2, '0');
+                    sanctionDate = `${selectedYear}-${monthStr}-01`; // Default al día 01 del mes
+                }
 
                 const driveRegex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
                 // CORRECCIÓN: Se ajusta la división de texto para aceptar comas, espacios y saltos de línea como separadores.
@@ -906,7 +933,7 @@
                             category: selectedCategory,
                             subcategory: selectedSubcategory,
                             documentNumber: "",
-                            sanctionDate: "",
+                            sanctionDate: sanctionDate,
                             promulgationDate: "",
                             scope: "",
                             userKeywords: [],
@@ -1776,9 +1803,9 @@
 
     <!-- Modal de Importación por Lote -->
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full mx-auto border-t-4 border-blue-500">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-2xl w-full mx-auto border-t-4 border-blue-500">
             <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar Borradores por Lote</h3>
-            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive separados por comas, espacios o saltos de línea. Se creará un borrador por cada enlace válido.</p>
+            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría y fecha de sanción a todos.</p>
             <div id="batchImportForm">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
@@ -1796,6 +1823,18 @@
                         <select id="batchSubcategorySelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500" disabled>
                             <option value="">Seleccione...</option>
                         </select>
+                    </div>
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Mes de Sanción (Opcional)</label>
+                         <select id="batchMonthSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
+                             <option value="">Mes...</option>
+                         </select>
+                    </div>
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Año de Sanción (Opcional)</label>
+                         <select id="batchYearSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
+                             <option value="">Año...</option>
+                         </select>
                     </div>
                 </div>
                 <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/..., https://drive.google.com/file/d/..."></textarea>
