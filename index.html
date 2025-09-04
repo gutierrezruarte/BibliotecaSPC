@@ -207,6 +207,8 @@
             const batchSubcategorySelect = document.getElementById('batchSubcategorySelect');
             const batchMonthSelect = document.getElementById('batchMonthSelect');
             const batchYearSelect = document.getElementById('batchYearSelect');
+            const batchScopeSelect = document.getElementById('batchScopeSelect');
+            const batchStatusSelect = document.getElementById('batchStatusSelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -708,6 +710,8 @@
                 
                 batchMonthSelect.value = '';
                 batchYearSelect.value = '';
+                batchScopeSelect.value = '';
+                batchStatusSelect.value = 'Borrador';
 
                 confirmBatchImportBtn.disabled = false;
                 cancelBatchImportBtn.disabled = false;
@@ -883,6 +887,8 @@
                 const selectedSubcategory = batchSubcategorySelect.disabled ? "" : batchSubcategorySelect.value;
                 const selectedMonth = batchMonthSelect.value;
                 const selectedYear = batchYearSelect.value;
+                const selectedScope = batchScopeSelect.value;
+                const intendedStatus = batchStatusSelect.value; // El estado final deseado por el usuario.
                 let sanctionDate = "";
 
                 if (selectedYear !== "" && selectedMonth !== "") {
@@ -927,7 +933,7 @@
                         const docData = {
                             fileName,
                             pdfLink: url,
-                            status: "Borrador",
+                            status: "Borrador", // Se guardan todos como borradores.
                             timestamp: new Date().toISOString(),
                             uploadedBy: userId,
                             category: selectedCategory,
@@ -935,9 +941,10 @@
                             documentNumber: "",
                             sanctionDate: sanctionDate,
                             promulgationDate: "",
-                            scope: "",
+                            scope: selectedScope,
                             userKeywords: [],
                             observations: "Importado por lote.",
+                            intendedStatus: intendedStatus, // Guardamos el estado final deseado.
                         };
 
                         const collectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
@@ -953,7 +960,7 @@
 
                 batchImportModal.classList.add('hidden');
                 
-                showModal(`Importación completada. ${successes} borradores creados. ${failures > 0 ? `${failures} enlaces fallaron.` : ''}`);
+                showModal(`Importación completada. ${successes} documentos creados. ${failures > 0 ? `${failures} enlaces fallaron.` : ''}`);
             }
 
             async function handleView(docId) {
@@ -1027,7 +1034,15 @@
                         categorySelect.dispatchEvent(new Event('change'));
                         setTimeout(() => { subcategorySelect.value = data.subcategory || ''; }, 100);
                         scopeSelect.value = data.scope || '';
-                        statusSelect.value = data.status || 'Vigente';
+                        
+                        // Si es un borrador importado por lote, usamos el estado pre-cargado.
+                        // De lo contrario, usamos el estado actual del documento.
+                        if (data.status === 'Borrador' && data.intendedStatus) {
+                            statusSelect.value = data.intendedStatus;
+                        } else {
+                            statusSelect.value = data.status || 'Vigente';
+                        }
+
                         document.getElementById('s_documentNumber').value = data.documentNumber || '';
                         document.getElementById('s_sanctionDate').value = data.sanctionDate || '';
                         document.getElementById('s_promulgationDate').value = data.promulgationDate || '';
@@ -1803,13 +1818,14 @@
 
     <!-- Modal de Importación por Lote -->
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-2xl w-full mx-auto border-t-4 border-blue-500">
-            <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar Borradores por Lote</h3>
-            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría y fecha de sanción a todos.</p>
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-3xl w-full mx-auto border-t-4 border-blue-500">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar por Lote</h3>
+            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría, fecha, alcance y estado a todos.</p>
             <div id="batchImportForm">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                    <!-- Fila 1 -->
                     <div>
-                        <label for="batchCategorySelect" class="block text-sm font-medium text-gray-700 mb-1">Categoría (Opcional)</label>
+                        <label for="batchCategorySelect" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
                         <select id="batchCategorySelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
                             <option value="">Aplicar a todos...</option>
                             <option value="Legislación">Legislación</option>
@@ -1819,22 +1835,42 @@
                         </select>
                     </div>
                     <div>
-                        <label for="batchSubcategorySelect" class="block text-sm font-medium text-gray-700 mb-1">Subcategoría (Opcional)</label>
+                        <label for="batchSubcategorySelect" class="block text-sm font-medium text-gray-700 mb-1">Subcategoría</label>
                         <select id="batchSubcategorySelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500" disabled>
                             <option value="">Seleccione...</option>
                         </select>
                     </div>
                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Mes de Sanción (Opcional)</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Mes de Sanción</label>
                          <select id="batchMonthSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
                              <option value="">Mes...</option>
                          </select>
                     </div>
+                     <!-- Fila 2 -->
                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Año de Sanción (Opcional)</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Año de Sanción</label>
                          <select id="batchYearSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
                              <option value="">Año...</option>
                          </select>
+                    </div>
+                    <div>
+                        <label for="batchScopeSelect" class="block text-sm font-medium text-gray-700 mb-1">Alcance</label>
+                        <select id="batchScopeSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
+                            <option value="">Aplicar a todos...</option>
+                            <option value="Internacional">Internacional</option>
+                            <option value="Nacional">Nacional</option>
+                            <option value="Federal">Federal</option>
+                            <option value="Provincial">Provincial</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="batchStatusSelect" class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                        <select id="batchStatusSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
+                            <option value="Borrador">Borrador (Por defecto)</option>
+                            <option value="Vigente">Vigente</option>
+                            <option value="Derogado">Derogado</option>
+                            <option value="No se especifica">No se especifica</option>
+                        </select>
                     </div>
                 </div>
                 <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/..., https://drive.google.com/file/d/..."></textarea>
@@ -1851,4 +1887,5 @@
     </div>
 </body>
 </html>
+
 
