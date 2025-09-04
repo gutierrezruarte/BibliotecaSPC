@@ -194,6 +194,16 @@
             const dailyDocsContainer = document.getElementById('dailyDocsContainer');
             const calendarLoading = document.getElementById('calendarLoading');
 
+            // --- Referencias a Elementos de Importación por Lote ---
+            const batchImportBtn = document.getElementById('batchImportBtn');
+            const batchImportModal = document.getElementById('batchImportModal');
+            const batchLinksTextarea = document.getElementById('batchLinksTextarea');
+            const cancelBatchImportBtn = document.getElementById('cancelBatchImportBtn');
+            const confirmBatchImportBtn = document.getElementById('confirmBatchImportBtn');
+            const batchImportLoading = document.getElementById('batchImportLoading');
+            const batchImportForm = document.getElementById('batchImportForm');
+            const batchImportProgress = document.getElementById('batchImportProgress');
+
             // --- Inicialización de Firebase ---
             try {
                 app = initializeApp(firebaseConfig);
@@ -668,6 +678,22 @@
                 e.currentTarget.classList.add('active-filter');
                 showView('ordenesInternas');
             });
+
+            // Listeners para Importación por Lote
+            batchImportBtn.addEventListener('click', () => {
+                batchImportModal.classList.remove('hidden');
+                batchImportForm.classList.remove('hidden');
+                batchImportLoading.classList.add('hidden');
+                batchLinksTextarea.value = '';
+                confirmBatchImportBtn.disabled = false;
+                cancelBatchImportBtn.disabled = false;
+            });
+
+            cancelBatchImportBtn.addEventListener('click', () => {
+                batchImportModal.classList.add('hidden');
+            });
+
+            confirmBatchImportBtn.addEventListener('click', handleBatchImport);
             
             // El resto de los listeners (login, formularios, etc.)
             const loginForm = document.getElementById('loginForm');
@@ -742,23 +768,22 @@
                     signOutBtn.classList.remove('hidden');
                     changePasswordBtn.classList.remove('hidden');
                     
-                    // Lógica de visibilidad de botones por rol
                     if (user.role === 'admin') {
-                        [newFileBtn, adminUsersBtn, draftsBtn].forEach(el => el.classList.remove('hidden'));
+                        [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.remove('hidden'));
                     } else if (user.role === 'asesor legal') {
                         newFileBtn.classList.remove('hidden');
-                        [adminUsersBtn, draftsBtn].forEach(el => el.classList.add('hidden'));
+                        [adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
                     } else { // Rol 'user' u otros
-                         [newFileBtn, adminUsersBtn, draftsBtn].forEach(el => el.classList.add('hidden'));
+                         [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
                     }
                 } else {
                     authStatusDiv.textContent = 'No Autenticado';
-                    [newFileBtn, adminUsersBtn, signOutBtn, changePasswordBtn, draftsBtn].forEach(el => el.classList.add('hidden'));
+                    [newFileBtn, adminUsersBtn, signOutBtn, changePasswordBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
                 }
             }
             const loginSuccess = (user) => {
                 userRole = user.role;
-                userId = user.id || user.dni; // CORRECCIÓN: Asegura que userId siempre tenga un valor (DNI del admin o del usuario)
+                userId = user.id || user.dni; 
                 currentUserDocId = user.docId;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
@@ -811,6 +836,79 @@
                     formLoadingIndicator.classList.add('hidden');
                 }
             }
+
+            async function handleBatchImport() {
+                const linksText = batchLinksTextarea.value.trim();
+                if (!linksText) {
+                    showModal("Por favor, pegue al menos un enlace.");
+                    return;
+                }
+
+                const driveRegex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
+                const urls = linksText.split('\n').map(link => link.trim()).filter(link => driveRegex.test(link));
+
+                if (urls.length === 0) {
+                    showModal("No se encontraron enlaces de Google Drive válidos.");
+                    return;
+                }
+
+                batchImportForm.classList.add('hidden');
+                batchImportLoading.classList.remove('hidden');
+                confirmBatchImportBtn.disabled = true;
+                cancelBatchImportBtn.disabled = true;
+
+                let successes = 0;
+                let failures = 0;
+
+                const importPromises = urls.map(async (url, index) => {
+                    try {
+                        batchImportProgress.textContent = `Procesando enlace ${index + 1} de ${urls.length}...`;
+                        
+                        // Se usa un proxy CORS para obtener el título de la página de Drive
+                        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                        const response = await fetch(proxyUrl);
+                        if (!response.ok) {
+                            throw new Error(`Error de red al buscar el título`);
+                        }
+                        const html = await response.text();
+                        const titleMatch = html.match(/<title>(.*?)<\/title>/);
+                        let fileName = `Borrador - ${new Date().getTime()}`; // Nombre por defecto
+                        if (titleMatch && titleMatch[1]) {
+                            fileName = titleMatch[1].replace(/ - Google Drive$/, '').trim();
+                        }
+
+                        const docData = {
+                            fileName,
+                            pdfLink: url,
+                            status: "Borrador",
+                            timestamp: new Date().toISOString(),
+                            uploadedBy: userId,
+                            category: "",
+                            subcategory: "",
+                            documentNumber: "",
+                            sanctionDate: "",
+                            promulgationDate: "",
+                            scope: "",
+                            userKeywords: [],
+                            observations: "Importado por lote.",
+                        };
+
+                        const collectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
+                        await addDoc(collectionRef, docData);
+                        successes++;
+                    } catch (error) {
+                        console.error(`Error procesando el enlace ${url}:`, error);
+                        failures++;
+                    }
+                });
+
+                await Promise.all(importPromises);
+
+                batchImportModal.classList.add('hidden');
+                
+                showModal(`Importación completada. ${successes} borradores creados. ${failures > 0 ? `${failures} enlaces fallaron.` : ''}`);
+            }
+
             async function handleView(docId) {
                 loadingIndicator.classList.remove('hidden');
                 currentViewingDocId = docId;
@@ -844,7 +942,6 @@
                             pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><p>No hay documento adjunto.</p></div>`;
                         }
 
-                        // Ocultar o mostrar botones de acción en detalle según el rol
                         if (userRole === 'admin') {
                             detailDeleteBtn.classList.remove('hidden');
                             detailEditBtn.classList.remove('hidden');
@@ -1188,6 +1285,10 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                             <span class="sidebar-text">Nuevo Archivo</span>
                         </button>
+                        <button id="batchImportBtn" class="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L6.293 6.707z" clip-rule="evenodd" /></svg>
+                            <span class="sidebar-text">Importar por Lote</span>
+                        </button>
                         <button id="draftsBtn" class="w-full flex items-center justify-between space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                             <span class="flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM4 8h5v2H4V8z" clip-rule="evenodd" /></svg>
@@ -1291,7 +1392,7 @@
                     <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-kumera-500"></div>
                 </div>
 
-                <div id="welcomeView" class="hidden">
+                <div id="welcomeView" class="">
                     <div class="max-w-4xl mx-auto">
                         <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-200 text-center">
                             <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-4 h-24 w-24 object-contain" onerror="this.src='https://placehold.co/96x96/111827/FFFFFF?text=Escudo';">
@@ -1651,11 +1752,24 @@
             </form>
         </div>
     </div>
+
+    <!-- Modal de Importación por Lote -->
+    <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full mx-auto border-t-4 border-blue-500">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar Borradores por Lote</h3>
+            <p class="text-sm text-gray-600 mb-4">Pegue uno o más enlaces de Google Drive (uno por línea). Se creará un borrador por cada enlace válido.</p>
+            <div id="batchImportForm">
+                <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/file/d/..."></textarea>
+            </div>
+            <div id="batchImportLoading" class="text-center py-8 hidden">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto"></div>
+                <p id="batchImportProgress" class="text-sm text-gray-600 mt-3">Procesando enlaces...</p>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="cancelBatchImportBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button id="confirmBatchImportBtn" type="button" class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700">Importar</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
-
-
-
-
-
-
