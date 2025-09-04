@@ -108,7 +108,7 @@
     <script type="module">
         // Importaciones de Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, updateDoc, orderBy, limit, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, updateDoc, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCYxPVi2VV3LuCxpKr-YNdJ0zCUKPbkcLg",
@@ -234,20 +234,19 @@
                 };
             }
 
-            // --- Lógica de la Lista de Documentos (con ordenamiento y filtro) ---
-
+            // --- Lógica de la Lista de Documentos ---
             function renderDocuments() {
                 let docsToRender = [...allDocsCache];
-
-                // 1. Filtrar por búsqueda global
+                
+                // Aplicar búsqueda global
                 const searchTerm = searchInput.value.toLowerCase();
                 if (searchTerm) {
                     docsToRender = docsToRender.filter(doc => 
                         Object.values(doc).some(val => String(val).toLowerCase().includes(searchTerm))
                     );
                 }
-                
-                // 2. Filtrar por columnas
+
+                // Aplicar filtros por columna
                 for (const field in columnFilters) {
                     const filterValue = columnFilters[field].toLowerCase();
                     if (filterValue) {
@@ -260,17 +259,8 @@
                         });
                     }
                 }
-
-                // 3. Ordenar
-                docsToRender.sort((a, b) => {
-                    const valA = a[sortState.field] || '';
-                    const valB = b[sortState.field] || '';
-                    if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
-                    if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
-                    return 0;
-                });
-
-                // 4. Renderizar en la tabla
+                
+                // El ordenamiento ya se aplicó en la consulta a Firestore
                 documentsTableBody.innerHTML = '';
                 if (docsToRender.length > 0) {
                     docsToRender.forEach(docData => {
@@ -278,43 +268,46 @@
                         documentsTableBody.appendChild(newRow);
                     });
                 } else {
-                    documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No se encontraron documentos.</td></tr>';
+                    documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No se encontraron documentos para los filtros aplicados.</td></tr>';
                 }
             }
 
-            function loadDocuments() {
+            // --- Carga de Documentos (sin paginación) ---
+            async function loadDocuments() {
                 loadingIndicator.classList.remove('hidden');
-                if (unsubscribe) unsubscribe();
+                documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Cargando documentos...</td></tr>';
+                allDocsCache = []; // Limpiar caché antes de la nueva carga
 
-                const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
-                
-                const constraints = [];
-                const isFiltering = currentFilterCategory || currentFilterSubcategory || currentFilterStatus;
+                try {
+                    const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
+                    let constraints = [];
 
-                if (currentFilterCategory) constraints.push(where("category", "==", currentFilterCategory));
-                if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
-                if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
-                
-                // Solo agregar orderBy si no se aplican filtros para evitar errores de índice compuesto.
-                if (!isFiltering) {
-                    constraints.push(orderBy("timestamp", "desc"));
-                }
-                
-                constraints.push(limit(100));
-                
-                const q = query(filesCollectionRef, ...constraints);
+                    // Agregar filtros de categoría
+                    if (currentFilterCategory) constraints.push(where("category", "==", currentFilterCategory));
+                    if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
+                    if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
 
-                unsubscribe = onSnapshot(q, (snapshot) => {
+                    // Aplicar ordenamiento desde el estado
+                    constraints.push(orderBy(sortState.field, sortState.direction));
+                    if (sortState.field !== 'timestamp') {
+                        // Agregar un segundo orderBy puede requerir índices compuestos adicionales.
+                        constraints.push(orderBy("timestamp", "desc"));
+                    }
+
+                    const q = query(filesCollectionRef, ...constraints);
+                    const snapshot = await getDocs(q);
+
                     allDocsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    // La función renderDocuments se encargará de aplicar el ordenamiento correcto.
-                    renderDocuments();
+                    renderDocuments(); // Renderizar con los filtros locales aplicados
+
+                } catch (error) {
+                    console.error("Error al cargar documentos:", error);
+                    showModal(`Error al cargar la lista de documentos. Es posible que se necesite un índice en la base de datos para este filtro/orden. Detalles: ${error.message}`);
+                    documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">No se pudieron cargar los documentos. Intente con otro filtro o contacte al administrador.</td></tr>';
+                } finally {
                     loadingIndicator.classList.add('hidden');
-                }, (error) => {
-                    console.error("Error al obtener documentos:", error);
-                    showModal(`Error al cargar documentos. Detalles: ${error.message}`);
-                    loadingIndicator.classList.add('hidden');
-                });
+                }
             }
 
             function createTableRow(docData) {
@@ -496,24 +489,35 @@
             // --- Event Listeners ---
             
             // Búsqueda y Filtros de la lista principal
+            searchInput.disabled = false;
+            searchInput.placeholder = "Buscar en todo...";
             searchInput.addEventListener('input', debounce(renderDocuments, 300));
+            
             document.querySelectorAll('.filter-input').forEach(input => {
+                input.disabled = false;
+                input.placeholder = "Filtrar...";
                 input.addEventListener('input', debounce(() => {
                     columnFilters[input.dataset.field] = input.value;
                     renderDocuments();
                 }, 300));
             });
+
             document.querySelectorAll('.sortable').forEach(header => {
                 header.addEventListener('click', () => {
                     const field = header.dataset.field;
-                    const currentDirection = sortState.field === field ? sortState.direction : 'desc';
-                    sortState.direction = currentDirection === 'asc' ? 'desc' : 'asc';
-                    sortState.field = field;
+                    // Si se hace clic en la misma columna, se invierte la dirección. Si no, se establece en 'asc'.
+                    if (sortState.field === field) {
+                        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortState.field = field;
+                        sortState.direction = 'asc';
+                    }
 
                     document.querySelectorAll('.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
                     header.classList.add(sortState.direction === 'asc' ? 'sort-asc' : 'sort-desc');
                     
-                    renderDocuments();
+                    // Recargar los documentos desde el principio con el nuevo orden
+                    loadDocuments(); 
                 });
             });
 
@@ -1022,6 +1026,7 @@
                 if(allDocsBtn) allDocsBtn.classList.add('active-filter');
                 showView('list');
             });
+            
         });
     </script>
 </head>
@@ -1240,6 +1245,7 @@
                 <div id="documentListView" class="hidden">
                     <h2 class="text-3xl font-bold text-inst-dark mb-2">Biblioteca Institucional</h2>
                     <p class="text-sm text-gray-600 mb-6">Ordene haciendo clic en los títulos o filtre por columna.</p>
+                    
                     <div class="bg-white rounded-xl shadow-lg overflow-x-auto border border-gray-200">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
@@ -1527,6 +1533,5 @@
     </div>
 </body>
 </html>
-
 
 
