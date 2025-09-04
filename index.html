@@ -845,7 +845,8 @@
                 }
 
                 const driveRegex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
-                const urls = linksText.split('\n').map(link => link.trim()).filter(link => driveRegex.test(link));
+                // CORRECCIÓN: Se ajusta la división de texto para aceptar comas, espacios y saltos de línea como separadores.
+                const urls = linksText.split(/[,\s\n]+/).map(link => link.trim()).filter(link => link && driveRegex.test(link));
 
                 if (urls.length === 0) {
                     showModal("No se encontraron enlaces de Google Drive válidos.");
@@ -1280,15 +1281,16 @@
                         <p id="authStatus" class="text-xs text-gray-400 mt-1 truncate sidebar-text">No Autenticado</p>
                     </div>
                     
-                    <div class="space-y-2 px-2">
-                        <button id="newFileBtn" class="w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                    <div class="flex items-center space-x-2 px-2">
+                        <button id="newFileBtn" class="flex-grow flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                             <span class="sidebar-text">Nuevo Archivo</span>
                         </button>
-                        <button id="batchImportBtn" class="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L6.293 6.707z" clip-rule="evenodd" /></svg>
-                            <span class="sidebar-text">Importar por Lote</span>
+                        <button id="batchImportBtn" title="Importar por Lote" class="flex-shrink-0 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md transition hidden">
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L6.293 6.707z" clip-rule="evenodd" /></svg>
                         </button>
+                    </div>
+                    <div class="space-y-2 px-2 mt-2">
                         <button id="draftsBtn" class="w-full flex items-center justify-between space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                             <span class="flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM4 8h5v2H4V8z" clip-rule="evenodd" /></svg>
@@ -1773,3 +1775,5 @@
     </div>
 </body>
 </html>
+
+
