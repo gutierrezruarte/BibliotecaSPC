@@ -136,12 +136,15 @@
         let currentViewingDocId = null;
         let unsubscribe;
         let allDocsCache = []; // Caché para documentos de la lista principal
+        let fullDocsCache = []; // Caché para todos los documentos (para los contadores)
+        let unsubscribeCounts; // Listener para los contadores
         let sortState = { field: 'timestamp', direction: 'desc' };
         let columnFilters = {};
         let calendarDate = new Date(); // Para la vista de calendario
 
         document.addEventListener('DOMContentLoaded', async () => {
             // --- Referencias a Elementos del DOM ---
+            const welcomeView = document.getElementById('welcomeView');
             const documentListView = document.getElementById('documentListView');
             const documentFormView = document.getElementById('documentFormView');
             const documentDetailView = document.getElementById('documentDetailView');
@@ -201,15 +204,16 @@
             }
 
             function showView(viewToShow) {
-                [documentListView, documentFormView, documentDetailView, userAdminView, ordenesInternasView].forEach(view => view.classList.add('hidden'));
+                [welcomeView, documentListView, documentFormView, documentDetailView, userAdminView, ordenesInternasView].forEach(view => view.classList.add('hidden'));
                 const viewMap = { 
+                    'welcome': welcomeView,
                     'list': documentListView, 
                     'form': documentFormView, 
                     'detail': documentDetailView, 
                     'userAdmin': userAdminView, 
                     'ordenesInternas': ordenesInternasView
                 };
-                const viewElement = viewMap[viewToShow] || documentListView;
+                const viewElement = viewMap[viewToShow] || welcomeView;
                 viewElement.classList.remove('hidden');
 
                 if (viewToShow === 'userAdmin') renderUsers();
@@ -341,6 +345,62 @@
                 }
                 return tr;
             }
+
+            // --- Lógica para contadores de categorías ---
+            function loadAllDocsForCount() {
+                if (unsubscribeCounts) unsubscribeCounts();
+                const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
+                unsubscribeCounts = onSnapshot(filesCollectionRef, (snapshot) => {
+                    fullDocsCache = snapshot.docs.map(doc => doc.data());
+                    updateCategoryCounts();
+                }, (error) => {
+                    console.error("Error al obtener documentos para contadores:", error);
+                });
+            }
+
+            function updateCategoryCounts() {
+                const counts = { total: 0 };
+                
+                fullDocsCache.forEach(doc => {
+                    if (doc.status !== 'Borrador') {
+                        counts.total++;
+                        if (doc.category) {
+                            counts[doc.category] = (counts[doc.category] || 0) + 1;
+                        }
+                        if (doc.category && doc.subcategory) {
+                            const subCatKey = `${doc.category}-${doc.subcategory}`;
+                            counts[subCatKey] = (counts[subCatKey] || 0) + 1;
+                        }
+                    }
+                });
+
+                counts.Borrador = fullDocsCache.filter(doc => doc.status === 'Borrador').length;
+
+                document.querySelectorAll('[data-main-category]').forEach(el => {
+                    const mainCat = el.dataset.mainCategory;
+                    const subCat = el.dataset.subcategory;
+                    const countSpan = el.querySelector('.category-count');
+                    if (!countSpan) return;
+
+                    let count = 0;
+                    if (mainCat === 'Todos') {
+                        count = counts.total || 0;
+                    } else if (subCat) {
+                        const key = `${mainCat}-${subCat}`;
+                        count = counts[key] || 0;
+                    } else {
+                        count = counts[mainCat] || 0;
+                    }
+                    countSpan.textContent = count;
+                });
+                
+                const draftsBtn = document.getElementById('draftsBtn');
+                const draftsBtnCount = draftsBtn.querySelector('.category-count');
+                if (draftsBtnCount) {
+                    draftsBtnCount.textContent = counts.Borrador || 0;
+                }
+            }
+
 
             // --- Lógica del Calendario ---
             async function renderCalendar() {
@@ -474,6 +534,13 @@
             });
 
             // Navegación Sidebar
+            document.getElementById('homeBtn').addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('.sidebar-filter-item, .sidebar-item').forEach(i => i.classList.remove('active-filter'));
+                e.currentTarget.classList.add('active-filter');
+                showView('welcome');
+            });
+
             document.getElementById('ordenesDelDiaBtn').addEventListener('click', (e) => {
                 e.preventDefault();
                 document.querySelectorAll('.sidebar-filter-item, .sidebar-item').forEach(i => i.classList.remove('active-filter'));
@@ -575,7 +642,8 @@
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 updateUserUI(user);
-                showView('list');
+                showView('welcome');
+                loadAllDocsForCount();
                 loadDocuments();
             };
             const logout = () => {
@@ -587,6 +655,7 @@
                 updateUserUI(null);
                 documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Inicia sesión para ver los documentos.</td></tr>';
                 if (unsubscribe) unsubscribe();
+                if (unsubscribeCounts) unsubscribeCounts();
             };
             async function handleSaveDocument(isDraft = false) {
                 formLoadingIndicator.classList.remove('hidden');
@@ -946,6 +1015,13 @@
                     });
                 }
             });
+
+            document.getElementById('enterLibraryBtn').addEventListener('click', () => {
+                document.querySelectorAll('.sidebar-filter-item, .sidebar-item').forEach(i => i.classList.remove('active-filter'));
+                const allDocsBtn = document.querySelector('[data-main-category="Todos"]');
+                if(allDocsBtn) allDocsBtn.classList.add('active-filter');
+                showView('list');
+            });
         });
     </script>
 </head>
@@ -990,17 +1066,31 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                             <span class="sidebar-text">Nuevo Archivo</span>
                         </button>
-                        <button id="draftsBtn" class="w-full flex items-center justify-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM4 8h5v2H4V8z" clip-rule="evenodd" /></svg>
-                            <span class="sidebar-text">Borradores</span>
+                        <button id="draftsBtn" class="w-full flex items-center justify-between space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                            <span class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM4 8h5v2H4V8z" clip-rule="evenodd" /></svg>
+                                <span class="sidebar-text">Borradores</span>
+                            </span>
+                            <span class="category-count bg-gray-700 text-xs font-semibold px-2 py-0.5 rounded-full"></span>
                         </button>
                         <input type="text" id="searchInput" placeholder="Buscar en todo..." class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-kumera-500 border-gray-600 shadow">
                     </div>
                     
                     <nav class="flex-1 space-y-1 px-2 overflow-y-auto mt-4">
-                        <a href="#" class="sidebar-filter-item active-filter group" data-main-category="Todos">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                            <span class="sidebar-text">Todos los Documentos</span>
+                        <a href="#" id="homeBtn" class="sidebar-item group active-filter flex justify-between items-center">
+                             <span class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                                <span class="sidebar-text">Inicio</span>
+                            </span>
+                        </a>
+                        <a href="#" class="sidebar-filter-item group flex justify-between items-center" data-main-category="Todos">
+                             <span class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                                <span class="sidebar-text">Todos los Documentos</span>
+                            </span>
+                            <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span>
                         </a>
                         <!-- Menú Legislación -->
                         <div>
@@ -1009,21 +1099,24 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación">Ver Todo</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Tratados Internacionales">Tratados</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Nacional">Constitución Nacional</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Nacionales">Leyes Nacionales</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Códigos">Códigos</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Nacionales">Decretos Nacionales</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Constitución Provincial">Constitución Provincial</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Leyes Provinciales">Leyes Provinciales</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Decretos Provinciales">Decretos Provinciales</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Legislación" data-subcategory="Resoluciones Ministeriales">Resoluciones</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Tratados Internacionales"><span>Tratados</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Constitución Nacional"><span>Constitución Nacional</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Leyes Nacionales"><span>Leyes Nacionales</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Códigos"><span>Códigos</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Decretos Nacionales"><span>Decretos Nacionales</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Constitución Provincial"><span>Constitución Provincial</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Leyes Provinciales"><span>Leyes Provinciales</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Decretos Provinciales"><span>Decretos Provinciales</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación" data-subcategory="Resoluciones Ministeriales"><span>Resoluciones</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
                             </div>
                         </div>
-                         <a href="#" class="sidebar-filter-item group" data-main-category="Doctrina">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
-                            <span class="sidebar-text">Doctrina</span>
+                         <a href="#" class="sidebar-filter-item group flex justify-between items-center" data-main-category="Doctrina">
+                             <span class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                                <span class="sidebar-text">Doctrina</span>
+                            </span>
+                             <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span>
                         </a>
                         <div>
                             <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
@@ -1031,11 +1124,11 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia">Ver Todo</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Internacional">Internacional</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Nacional">Nacional</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Federal">Federal</a>
-                                <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Jurisprudencia" data-subcategory="Provincial">Provincial</a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia" data-subcategory="Internacional"><span>Internacional</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia" data-subcategory="Nacional"><span>Nacional</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia" data-subcategory="Federal"><span>Federal</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia" data-subcategory="Provincial"><span>Provincial</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
                             </div>
                         </div>
                         <div>
@@ -1044,12 +1137,12 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-institucional" class="hidden pl-8 space-y-0.5 mt-1">
-                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional">Ver Todo</a>
-                               <a href="#" id="ordenesDelDiaBtn" class="sidebar-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Orden del Día">Orden del Día</a>
-                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Disposiciones">Disposiciones</a>
-                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Memos">Memos</a>
-                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Protocolos">Protocolos</a>
-                               <a href="#" class="sidebar-filter-item sidebar-submenu-item" data-main-category="Institucional" data-subcategory="Comunicaciones">Comunicaciones</a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                               <a href="#" id="ordenesDelDiaBtn" class="sidebar-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional" data-subcategory="Orden del Día"><span>Orden del Día</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional" data-subcategory="Disposiciones"><span>Disposiciones</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional" data-subcategory="Memos"><span>Memos</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional" data-subcategory="Protocolos"><span>Protocolos</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
+                               <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional" data-subcategory="Comunicaciones"><span>Comunicaciones</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
                             </div>
                         </div>
                     </nav>
@@ -1075,8 +1168,76 @@
                 <div id="loadingIndicator" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50 hidden">
                     <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-kumera-500"></div>
                 </div>
+
+                <div id="welcomeView" class="hidden">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-200 text-center">
+                            <img src="https://raw.githubusercontent.com/gutierrezruarte/BibliotecaSPC/main/Escudo-1-279x300-removebg-preview.png" alt="Escudo Institucional" class="mx-auto mb-4 h-24 w-24 object-contain" onerror="this.src='https://placehold.co/96x96/111827/FFFFFF?text=Escudo';">
+                            <h2 class="text-3xl font-bold text-inst-dark mb-2">Bienvenido a la Biblioteca Digital</h2>
+                            <p class="text-gray-600 max-w-2xl mx-auto">Este espacio centraliza y organiza la documentación relevante para nuestra institución, facilitando el acceso rápido y eficiente a la información.</p>
+                            <button id="enterLibraryBtn" class="mt-6 bg-kumera-500 text-white font-bold py-3 px-8 rounded-lg hover:bg-kumera-600 focus:outline-none focus:ring-2 focus:ring-kumera-400 transition duration-300">
+                                Ingresar a la Biblioteca
+                            </button>
+                        </div>
+
+                        <div class="mt-8 grid md:grid-cols-2 gap-8 text-left">
+                            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                                <h3 class="text-xl font-semibold text-inst-dark mb-4 border-b pb-2">Contenido de la Biblioteca</h3>
+                                <ul class="space-y-3 text-gray-700">
+                                    <li class="flex items-start">
+                                        <svg class="h-5 w-5 mr-3 mt-1 text-kumera-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                        <div>
+                                            <h4 class="font-semibold">Legislación</h4>
+                                            <p class="text-sm">Normativas de distintos niveles (nacional, provincial, etc.), constituciones y códigos.</p>
+                                        </div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <svg class="h-5 w-5 mr-3 mt-1 text-kumera-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <div>
+                                            <h4 class="font-semibold">Doctrina y Jurisprudencia</h4>
+                                            <p class="text-sm">Análisis, opiniones de expertos y decisiones judiciales relevantes para nuestra labor.</p>
+                                        </div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <svg class="h-5 w-5 mr-3 mt-1 text-kumera-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3h3m-3 3h3m-3 3h3m-3 3h3" /></svg>
+                                        <div>
+                                            <h4 class="font-semibold">Institucional</h4>
+                                            <p class="text-sm">Documentos internos como órdenes del día, disposiciones, memos y protocolos.</p>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                                <h3 class="text-xl font-semibold text-inst-dark mb-4 border-b pb-2">Guía de Uso Rápido</h3>
+                                <ul class="space-y-3 text-gray-700">
+                                     <li class="flex items-start">
+                                        <svg class="h-5 w-5 mr-3 mt-1 text-kumera-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                                        <div>
+                                            <h4 class="font-semibold">Navegar por Categorías</h4>
+                                            <p class="text-sm">Use el menú de la izquierda para explorar. Los números indican la cantidad de documentos en cada sección.</p>
+                                        </div>
+                                    </li>
+                                     <li class="flex items-start">
+                                        <svg class="h-5 w-5 mr-3 mt-1 text-kumera-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                        <div>
+                                            <h4 class="font-semibold">Búsqueda Rápida y Filtros</h4>
+                                            <p class="text-sm">Utilice la barra de búsqueda general o los filtros de cada columna en la tabla para encontrar lo que necesita.</p>
+                                        </div>
+                                    </li>
+                                     <li class="flex items-start">
+                                        <svg class="h-5 w-5 mr-3 mt-1 text-kumera-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.022 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                        <div>
+                                            <h4 class="font-semibold">Visualizar Documentos</h4>
+                                            <p class="text-sm">Haga clic en el ícono del ojo (👁️) en la lista para abrir la vista detallada y previsualizar el PDF.</p>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
-                <div id="documentListView" class="">
+                <div id="documentListView" class="hidden">
                     <h2 class="text-3xl font-bold text-inst-dark mb-2">Biblioteca Institucional</h2>
                     <p class="text-sm text-gray-600 mb-6">Ordene haciendo clic en los títulos o filtre por columna.</p>
                     <div class="bg-white rounded-xl shadow-lg overflow-x-auto border border-gray-200">
@@ -1366,5 +1527,6 @@
     </div>
 </body>
 </html>
+
 
 
