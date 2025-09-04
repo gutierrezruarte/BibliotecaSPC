@@ -203,6 +203,8 @@
             const batchImportLoading = document.getElementById('batchImportLoading');
             const batchImportForm = document.getElementById('batchImportForm');
             const batchImportProgress = document.getElementById('batchImportProgress');
+            const batchCategorySelect = document.getElementById('batchCategorySelect');
+            const batchSubcategorySelect = document.getElementById('batchSubcategorySelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -685,6 +687,9 @@
                 batchImportForm.classList.remove('hidden');
                 batchImportLoading.classList.add('hidden');
                 batchLinksTextarea.value = '';
+                batchCategorySelect.value = '';
+                batchSubcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
+                batchSubcategorySelect.disabled = true;
                 confirmBatchImportBtn.disabled = false;
                 cancelBatchImportBtn.disabled = false;
             });
@@ -695,6 +700,17 @@
 
             confirmBatchImportBtn.addEventListener('click', handleBatchImport);
             
+            batchCategorySelect.addEventListener('change', () => {
+                const selectedCategory = batchCategorySelect.value;
+                batchSubcategorySelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
+                if (selectedCategory && subcategoryMap[selectedCategory]?.length > 0) {
+                    subcategoryMap[selectedCategory].forEach(subCat => batchSubcategorySelect.add(new Option(subCat, subCat)));
+                    batchSubcategorySelect.disabled = false;
+                } else {
+                    batchSubcategorySelect.disabled = true;
+                }
+            });
+
             // El resto de los listeners (login, formularios, etc.)
             const loginForm = document.getElementById('loginForm');
             const loginUsernameInput = document.getElementById('loginUsername');
@@ -843,6 +859,9 @@
                     showModal("Por favor, pegue al menos un enlace.");
                     return;
                 }
+                
+                const selectedCategory = batchCategorySelect.value;
+                const selectedSubcategory = batchSubcategorySelect.disabled ? "" : batchSubcategorySelect.value;
 
                 const driveRegex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
                 // CORRECCIÓN: Se ajusta la división de texto para aceptar comas, espacios y saltos de línea como separadores.
@@ -884,8 +903,8 @@
                             status: "Borrador",
                             timestamp: new Date().toISOString(),
                             uploadedBy: userId,
-                            category: "",
-                            subcategory: "",
+                            category: selectedCategory,
+                            subcategory: selectedSubcategory,
                             documentNumber: "",
                             sanctionDate: "",
                             promulgationDate: "",
@@ -1759,9 +1778,27 @@
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full mx-auto border-t-4 border-blue-500">
             <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar Borradores por Lote</h3>
-            <p class="text-sm text-gray-600 mb-4">Pegue uno o más enlaces de Google Drive (uno por línea). Se creará un borrador por cada enlace válido.</p>
+            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive separados por comas, espacios o saltos de línea. Se creará un borrador por cada enlace válido.</p>
             <div id="batchImportForm">
-                <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/file/d/..."></textarea>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="batchCategorySelect" class="block text-sm font-medium text-gray-700 mb-1">Categoría (Opcional)</label>
+                        <select id="batchCategorySelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
+                            <option value="">Aplicar a todos...</option>
+                            <option value="Legislación">Legislación</option>
+                            <option value="Doctrina">Doctrina</option>
+                            <option value="Jurisprudencia">Jurisprudencia</option>
+                            <option value="Institucional">Institucional</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="batchSubcategorySelect" class="block text-sm font-medium text-gray-700 mb-1">Subcategoría (Opcional)</label>
+                        <select id="batchSubcategorySelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500" disabled>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/..., https://drive.google.com/file/d/..."></textarea>
             </div>
             <div id="batchImportLoading" class="text-center py-8 hidden">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto"></div>
@@ -1775,5 +1812,4 @@
     </div>
 </body>
 </html>
-
 
