@@ -282,28 +282,47 @@
                     const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
                     let constraints = [];
 
-                    // Agregar filtros de categoría
+                    // Agregar filtros de categoría (where clauses)
                     if (currentFilterCategory) constraints.push(where("category", "==", currentFilterCategory));
                     if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
                     if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
 
-                    // Aplicar ordenamiento desde el estado
-                    constraints.push(orderBy(sortState.field, sortState.direction));
-                    if (sortState.field !== 'timestamp') {
-                        // Agregar un segundo orderBy puede requerir índices compuestos adicionales.
-                        constraints.push(orderBy("timestamp", "desc"));
-                    }
-
+                    // **CORRECCIÓN:** Se elimina el orderBy de la consulta a Firebase para evitar el error de índice.
                     const q = query(filesCollectionRef, ...constraints);
                     const snapshot = await getDocs(q);
 
-                    allDocsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    renderDocuments(); // Renderizar con los filtros locales aplicados
+                    // **NUEVO:** Se realiza el ordenamiento en el lado del cliente (en el navegador).
+                    docs.sort((a, b) => {
+                        const field = sortState.field;
+                        const dir = sortState.direction === 'asc' ? 1 : -1;
+                        
+                        let valA = a[field] || '';
+                        let valB = b[field] || '';
+
+                        // Manejar fechas correctamente para el ordenamiento
+                        if (field === 'sanctionDate' || field === 'timestamp') {
+                            valA = valA ? new Date(valA).getTime() : 0;
+                            valB = valB ? new Date(valB).getTime() : 0;
+                        }
+
+                        if (typeof valA === 'string') {
+                            return valA.localeCompare(valB, 'es', { numeric: true }) * dir;
+                        } else {
+                            if (valA < valB) return -1 * dir;
+                            if (valA > valB) return 1 * dir;
+                            return 0;
+                        }
+                    });
+                    
+                    allDocsCache = docs;
+                    
+                    renderDocuments(); // Renderizar los datos ya filtrados y ordenados
 
                 } catch (error) {
                     console.error("Error al cargar documentos:", error);
-                    showModal(`Error al cargar la lista de documentos. Es posible que se necesite un índice en la base de datos para este filtro/orden. Detalles: ${error.message}`);
+                    showModal(`Error al cargar la lista de documentos. Detalles: ${error.message}`);
                     documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">No se pudieron cargar los documentos. Intente con otro filtro o contacte al administrador.</td></tr>';
                 } finally {
                     loadingIndicator.classList.add('hidden');
