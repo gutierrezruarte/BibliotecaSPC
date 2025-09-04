@@ -104,18 +104,34 @@
         .calendar-day { transition: all 0.2s ease-in-out; }
         .calendar-day.has-docs { background-color: #eeecd3; font-weight: bold; }
         .calendar-day.selected { background-color: #ad9645 !important; color: white; }
-        .doc-indicator {
+        .doc-indicator-container {
             position: absolute;
-            bottom: 4px;
+            bottom: 3px;
             left: 50%;
             transform: translateX(-50%);
-            width: 6px;
-            height: 6px;
+            display: flex;
+            gap: 2px;
+            align-items: center;
+            justify-content: center;
+            height: 5px;
+        }
+        .doc-indicator {
+            width: 5px;
+            height: 5px;
             background-color: #785c31; /* kumera-700 */
             border-radius: 50%;
+            flex-shrink: 0;
         }
-        .calendar-day.selected .doc-indicator {
+        .doc-indicator-more {
+            font-size: 10px;
+            font-weight: bold;
+            color: #785c31;
+            line-height: 1;
+            margin-left: 1px;
+        }
+        .calendar-day.selected .doc-indicator, .calendar-day.selected .doc-indicator-more {
             background-color: white;
+            color: white;
         }
     </style>
     <script type="module">
@@ -514,10 +530,26 @@
 
                 // Rellenar días del mes
                 for (let day = 1; day <= daysInMonth; day++) {
-                    const hasDocs = docsByDay[day] ? 'has-docs' : '';
-                    const indicator = hasDocs ? '<span class="doc-indicator"></span>' : '';
+                    const dayDocs = docsByDay[day];
+                    const hasDocs = dayDocs && dayDocs.length > 0 ? 'has-docs' : '';
+                    let indicatorHTML = '';
+
+                    if (hasDocs) {
+                        const docCount = dayDocs.length;
+                        let indicators = '';
+                        // Muestra hasta 3 puntos
+                        for(let i = 0; i < Math.min(docCount, 3); i++) {
+                            indicators += '<span class="doc-indicator"></span>';
+                        }
+                        // Si hay más de 3, muestra un '+'
+                        if (docCount > 3) {
+                            indicators += `<span class="doc-indicator-more">+</span>`;
+                        }
+                        indicatorHTML = `<div class="doc-indicator-container" title="${docCount} documento(s)">${indicators}</div>`;
+                    }
+                    
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    calendarGrid.innerHTML += `<button data-date="${dateStr}" class="calendar-day relative border border-gray-200 p-2 text-center hover:bg-kumera-100 ${hasDocs}">${day}${indicator}</button>`;
+                    calendarGrid.innerHTML += `<button data-date="${dateStr}" class="calendar-day relative border border-gray-200 p-2 text-center hover:bg-kumera-100 ${hasDocs}">${day}${indicatorHTML}</button>`;
                 }
                 
                 calendarLoading.classList.add('hidden');
@@ -1621,6 +1653,8 @@
     </div>
 </body>
 </html>
+
+
 
 
 
