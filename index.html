@@ -104,6 +104,19 @@
         .calendar-day { transition: all 0.2s ease-in-out; }
         .calendar-day.has-docs { background-color: #eeecd3; font-weight: bold; }
         .calendar-day.selected { background-color: #ad9645 !important; color: white; }
+        .doc-indicator {
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 6px;
+            height: 6px;
+            background-color: #785c31; /* kumera-700 */
+            border-radius: 50%;
+        }
+        .calendar-day.selected .doc-indicator {
+            background-color: white;
+        }
     </style>
     <script type="module">
         // Importaciones de Firebase
@@ -502,8 +515,9 @@
                 // Rellenar días del mes
                 for (let day = 1; day <= daysInMonth; day++) {
                     const hasDocs = docsByDay[day] ? 'has-docs' : '';
+                    const indicator = hasDocs ? '<span class="doc-indicator"></span>' : '';
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    calendarGrid.innerHTML += `<button data-date="${dateStr}" class="calendar-day border border-gray-200 p-2 text-center hover:bg-kumera-100 ${hasDocs}">${day}</button>`;
+                    calendarGrid.innerHTML += `<button data-date="${dateStr}" class="calendar-day relative border border-gray-200 p-2 text-center hover:bg-kumera-100 ${hasDocs}">${day}${indicator}</button>`;
                 }
                 
                 calendarLoading.classList.add('hidden');
@@ -1607,6 +1621,7 @@
     </div>
 </body>
 </html>
+
 
 
 
