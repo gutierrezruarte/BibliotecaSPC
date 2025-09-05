@@ -225,7 +225,6 @@
             const batchMonthSelect = document.getElementById('batchMonthSelect');
             const batchYearSelect = document.getElementById('batchYearSelect');
             const batchScopeSelect = document.getElementById('batchScopeSelect');
-            const batchStatusSelect = document.getElementById('batchStatusSelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -240,17 +239,31 @@
             // --- Funciones de la Aplicación ---
             const formatDate = (d, includeTime = false) => {
                 if (!d) return 'N/A';
-                const date = new Date(d);
-                const offset = date.getTimezoneOffset();
-                date.setMinutes(date.getMinutes() + offset);
                 
-                const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
+                const date = new Date(d);
+                
+                // Para fechas sin hora (ej: "2024-09-05"), los navegadores las interpretan como medianoche UTC.
+                // Esto puede hacer que se muestren como el día anterior en zonas horarias detrás de UTC (como Argentina).
+                // Este ajuste corrige ese desfase al considerar la zona horaria del cliente.
+                if (!includeTime && d.indexOf('T') === -1) {
+                     date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
+                }
+
+                const options = {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                };
+
                 if (includeTime) {
                     options.hour = '2-digit';
                     options.minute = '2-digit';
                     options.second = '2-digit';
+                    // Se especifica la zona horaria de Argentina para asegurar que siempre se muestre la hora correcta.
+                    options.timeZone = 'America/Argentina/Buenos_Aires';
                 }
-                return date.toLocaleString('es-ES', options);
+
+                return date.toLocaleString('es-AR', options);
             };
             
             function getEmbeddableDriveLink(url) {
@@ -652,9 +665,7 @@
                     snapshot.forEach(doc => {
                         const data = doc.data();
                         const date = new Date(data.sanctionDate);
-                        const offset = date.getTimezoneOffset();
-                        date.setMinutes(date.getMinutes() + offset);
-                        const day = date.getDate();
+                        const day = date.getUTCDate();
                         
                         if (!docsByDay[day]) docsByDay[day] = [];
                         docsByDay[day].push({ id: doc.id, ...data });
@@ -1487,7 +1498,7 @@
                     </div>
                     <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Ingresar</button>
                     <p class="text-sm text-gray-500 pt-2">Contacte al administrador para obtener credenciales.</p>
-                    <div id="loginMessage" class="mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800 hidden"></div>
+                    <div id="loginMessage" class="hidden mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800"></div>
                 </form>
             </div>
         </div>
@@ -1543,9 +1554,12 @@
                         </a>
                         <!-- Menú Legislación -->
                         <div>
-                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion">
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion" data-main-category="Legislación">
                                 <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3-5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg><span class="sidebar-text">Legislación</span></span>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                <span class="flex items-center">
+                                    <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full mr-2"></span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </span>
                             </button>
                             <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
                                 <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
@@ -1568,9 +1582,12 @@
                              <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span>
                         </a>
                         <div>
-                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia" data-main-category="Jurisprudencia">
                                 <span class="flex items-center"><span class="custom-icon mr-3 flex-shrink-0">▰</span><span class="sidebar-text">Jurisprudencia</span></span>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                <span class="flex items-center">
+                                    <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full mr-2"></span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </span>
                             </button>
                             <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
                                 <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
@@ -1581,9 +1598,12 @@
                             </div>
                         </div>
                         <div>
-                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional">
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional" data-main-category="Institucional">
                                 <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg><span class="sidebar-text">Institucional</span></span>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                <span class="flex items-center">
+                                    <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full mr-2"></span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </span>
                             </button>
                             <div id="menu-institucional" class="hidden pl-8 space-y-0.5 mt-1">
                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
@@ -2031,7 +2051,7 @@
                     <label for="confirmPassword" class="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
                     <input type="password" id="confirmPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
                 </div>
-                <div id="changePasswordMessage" class="hidden"></div>
+                <div id="changePasswordMessage" class="hidden text-sm text-red-600"></div>
                 <div class="mt-6 flex justify-end space-x-3">
                     <button id="cancelChangePasswordBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
                     <button type="submit" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Guardar</button>
@@ -2102,4 +2122,5 @@
     </div>
 </body>
 </html>
+
 
