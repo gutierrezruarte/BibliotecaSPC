@@ -153,6 +153,7 @@
         let app, db;
         let userRole = null;
         let userId = null;
+        let currentUserName = null;
         let currentUserDocId = null; 
         const ADMIN_USER = '36219951';
         const ADMIN_PASSWORD = 'Marquitos123';
@@ -166,10 +167,12 @@
         let unsubscribe;
         let allDocsCache = []; // Caché para documentos de la lista principal
         let fullDocsCache = []; // Caché para todos los documentos (para los contadores)
+        let allLogsCache = []; // Caché para registros de actividad
         let unsubscribeCounts; // Listener para los contadores
         let sortState = { field: 'timestamp', direction: 'desc' };
         let columnFilters = {};
         let calendarDate = new Date(); // Para la vista de calendario
+        let ordenesViewMode = 'calendar'; // 'calendar' o 'list'
 
         document.addEventListener('DOMContentLoaded', async () => {
             // --- Referencias a Elementos del DOM ---
@@ -178,6 +181,7 @@
             const documentFormView = document.getElementById('documentFormView');
             const documentDetailView = document.getElementById('documentDetailView');
             const userAdminView = document.getElementById('userAdminView');
+            const activityLogView = document.getElementById('activityLogView');
             const ordenesInternasView = document.getElementById('ordenesInternasView');
             const loginView = document.getElementById('loginView');
             const appContainer = document.getElementById('appContainer');
@@ -185,7 +189,7 @@
             const documentsTableBody = document.getElementById('documentsTableBody');
             const searchInput = document.getElementById('searchInput');
             
-            // --- Referencias a Elementos del Calendario ---
+            // --- Referencias a Elementos de Órdenes del Día ---
             const calendarGrid = document.getElementById('calendarGrid');
             const monthSelector = document.getElementById('monthSelector');
             const yearSelector = document.getElementById('yearSelector');
@@ -193,6 +197,19 @@
             const nextMonthBtn = document.getElementById('nextMonthBtn');
             const dailyDocsContainer = document.getElementById('dailyDocsContainer');
             const calendarLoading = document.getElementById('calendarLoading');
+            const toggleOrdenesViewBtn = document.getElementById('toggleOrdenesViewBtn');
+            const ordenesCalendarContainer = document.getElementById('ordenesCalendarContainer');
+            const ordenesListContainer = document.getElementById('ordenesListContainer');
+            const ordenesTableBody = document.getElementById('ordenesTableBody');
+
+            // --- Referencias a Elementos de Log de Actividad ---
+            const viewLogBtn = document.getElementById('viewLogBtn');
+            const backToAdminBtn = document.getElementById('backToAdminBtn');
+            const activityLogTableBody = document.getElementById('activityLogTableBody');
+            const logUserFilter = document.getElementById('logUserFilter');
+            const logDateFilter = document.getElementById('logDateFilter');
+            const logActionFilter = document.getElementById('logActionFilter');
+            const logDetailsFilter = document.getElementById('logDetailsFilter');
 
             // --- Referencias a Elementos de Importación por Lote ---
             const batchImportBtn = document.getElementById('batchImportBtn');
@@ -208,6 +225,7 @@
             const batchMonthSelect = document.getElementById('batchMonthSelect');
             const batchYearSelect = document.getElementById('batchYearSelect');
             const batchScopeSelect = document.getElementById('batchScopeSelect');
+            const batchStatusSelect = document.getElementById('batchStatusSelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -220,21 +238,19 @@
             }
             
             // --- Funciones de la Aplicación ---
-
-            /**
-             * CORRECCIÓN DE FECHA: Corrige el problema de la zona horaria.
-             * El input type="date" devuelve "YYYY-MM-DD". new Date("YYYY-MM-DD") lo interpreta como medianoche UTC.
-             * En zonas horarias detrás de UTC (ej. Argentina, UTC-3), esto se convierte en el día anterior.
-             * Esta función ajusta la fecha a la medianoche local para mostrar siempre el día correcto.
-             * @param {string} d - La fecha en formato "YYYY-MM-DD".
-             * @returns {string} La fecha formateada para la región local o 'N/A'.
-             */
-            const formatDate = (d) => {
+            const formatDate = (d, includeTime = false) => {
                 if (!d) return 'N/A';
                 const date = new Date(d);
                 const offset = date.getTimezoneOffset();
                 date.setMinutes(date.getMinutes() + offset);
-                return date.toLocaleDateString('es-ES');
+                
+                const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
+                if (includeTime) {
+                    options.hour = '2-digit';
+                    options.minute = '2-digit';
+                    options.second = '2-digit';
+                }
+                return date.toLocaleString('es-ES', options);
             };
             
             function getEmbeddableDriveLink(url) {
@@ -249,22 +265,99 @@
             }
 
             function showView(viewToShow) {
-                [welcomeView, documentListView, documentFormView, documentDetailView, userAdminView, ordenesInternasView].forEach(view => view.classList.add('hidden'));
+                [welcomeView, documentListView, documentFormView, documentDetailView, userAdminView, ordenesInternasView, activityLogView].forEach(view => view.classList.add('hidden'));
                 const viewMap = { 
                     'welcome': welcomeView,
                     'list': documentListView, 
                     'form': documentFormView, 
                     'detail': documentDetailView, 
                     'userAdmin': userAdminView, 
+                    'activityLog': activityLogView,
                     'ordenesInternas': ordenesInternasView
                 };
                 const viewElement = viewMap[viewToShow] || welcomeView;
                 viewElement.classList.remove('hidden');
 
                 if (viewToShow === 'userAdmin') renderUsers();
+                if (viewToShow === 'activityLog') loadAndRenderActivityLog();
                 if (viewToShow === 'ordenesInternas') {
                     populateDateSelectors();
                     renderCalendar();
+                }
+            }
+            
+            // --- Lógica de Registro de Actividad ---
+            async function logUserActivity(action, details = {}) {
+                if (!userId || !currentUserName) return; // No registrar si no hay un usuario logueado
+                try {
+                    const logData = {
+                        userId,
+                        userName: currentUserName,
+                        action,
+                        timestamp: new Date().toISOString(),
+                        details,
+                    };
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/activity_logs`), logData);
+                } catch (error) {
+                    console.error("Error al registrar actividad:", error);
+                }
+            }
+
+            async function loadAndRenderActivityLog() {
+                loadingIndicator.classList.remove('hidden');
+                activityLogTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Cargando registros...</td></tr>';
+
+                try {
+                    // Populate user filter
+                    const usersSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/users`));
+                    logUserFilter.innerHTML = '<option value="">Todos los Usuarios</option>';
+                    usersSnapshot.forEach(doc => {
+                        const u = doc.data();
+                        logUserFilter.add(new Option(`${u.firstName} ${u.lastName}`, u.dni));
+                    });
+                    logUserFilter.add(new Option('Administrador', ADMIN_USER));
+
+                    // Fetch logs
+                    const logsSnapshot = await getDocs(query(collection(db, `artifacts/${appId}/public/data/activity_logs`), orderBy("timestamp", "desc")));
+                    allLogsCache = logsSnapshot.docs.map(doc => doc.data());
+                    renderActivityLog();
+                } catch (error) {
+                    console.error("Error al cargar el log de actividad:", error);
+                    activityLogTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">No se pudieron cargar los registros.</td></tr>';
+                } finally {
+                    loadingIndicator.classList.add('hidden');
+                }
+            }
+
+            function renderActivityLog() {
+                let logsToRender = [...allLogsCache];
+
+                const user = logUserFilter.value;
+                const date = logDateFilter.value;
+                const action = logActionFilter.value.toLowerCase();
+                const details = logDetailsFilter.value.toLowerCase();
+
+                if (user) logsToRender = logsToRender.filter(log => log.userId === user);
+                if (date) logsToRender = logsToRender.filter(log => log.timestamp.startsWith(date));
+                if (action) logsToRender = logsToRender.filter(log => log.action.toLowerCase().includes(action));
+                if (details) logsToRender = logsToRender.filter(log => JSON.stringify(log.details).toLowerCase().includes(details));
+
+                activityLogTableBody.innerHTML = '';
+                if (logsToRender.length > 0) {
+                    logsToRender.forEach(log => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-gray-200 hover:bg-kumera-50 text-sm';
+                        const detailString = log.details && Object.keys(log.details).length > 0 ? `${log.details.documentName || ''} (ID: ${log.details.documentId || 'N/A'})` : 'N/A';
+                        tr.innerHTML = `
+                            <td class="py-2 px-3">${log.userName} (${log.userId})</td>
+                            <td class="py-2 px-3">${log.action}</td>
+                            <td class="py-2 px-3" title="${detailString}">${detailString.substring(0, 50)}${detailString.length > 50 ? '...' : ''}</td>
+                            <td class="py-2 px-3">${formatDate(log.timestamp, true)}</td>
+                        `;
+                        activityLogTableBody.appendChild(tr);
+                    });
+                } else {
+                    activityLogTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No se encontraron registros para los filtros aplicados.</td></tr>';
                 }
             }
 
@@ -318,12 +411,11 @@
                     documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No se encontraron documentos para los filtros aplicados.</td></tr>';
                 }
             }
-
-            // --- Carga de Documentos (sin paginación) ---
+            
             async function loadDocuments() {
                 loadingIndicator.classList.remove('hidden');
                 documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Cargando documentos...</td></tr>';
-                allDocsCache = []; // Limpiar caché antes de la nueva carga
+                allDocsCache = [];
 
                 try {
                     const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
@@ -334,21 +426,18 @@
                     if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
                     if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
 
-                    // **CORRECCIÓN:** Se elimina el orderBy de la consulta a Firebase para evitar el error de índice.
                     const q = query(filesCollectionRef, ...constraints);
                     const snapshot = await getDocs(q);
 
                     let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    // **NUEVO:** Se realiza el ordenamiento en el lado del cliente (en el navegador).
+                    // Ordenamiento en el cliente
                     docs.sort((a, b) => {
                         const field = sortState.field;
                         const dir = sortState.direction === 'asc' ? 1 : -1;
-                        
                         let valA = a[field] || '';
                         let valB = b[field] || '';
 
-                        // Manejar fechas correctamente para el ordenamiento
                         if (field === 'sanctionDate' || field === 'timestamp') {
                             valA = valA ? new Date(valA).getTime() : 0;
                             valB = valB ? new Date(valB).getTime() : 0;
@@ -364,39 +453,52 @@
                     });
                     
                     allDocsCache = docs;
-                    
-                    renderDocuments(); // Renderizar los datos ya filtrados y ordenados
+                    renderDocuments();
 
                 } catch (error) {
                     console.error("Error al cargar documentos:", error);
                     showModal(`Error al cargar la lista de documentos. Detalles: ${error.message}`);
-                    documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">No se pudieron cargar los documentos. Intente con otro filtro o contacte al administrador.</td></tr>';
+                    documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">No se pudieron cargar los documentos.</td></tr>';
                 } finally {
                     loadingIndicator.classList.add('hidden');
                 }
             }
 
-            function createTableRow(docData) {
+            function createTableRow(docData, isOrdenDelDia = false) {
                 const tr = document.createElement('tr');
                 tr.dataset.id = docData.id; 
                 tr.className = 'border-b border-gray-200 hover:bg-kumera-50 text-sm';
                 const keywords = (docData.userKeywords || []).join(', ');
                 const canEdit = userRole === 'admin';
 
-                tr.innerHTML = `
-                    <td class="py-2 px-3 text-inst-text-light font-medium">${docData.fileName}</td>
-                    <td class="py-2 px-3 text-inst-text-light">${docData.category || 'N/A'}</td>
-                    <td class="py-2 px-3 text-inst-text-light">${docData.subcategory || 'N/A'}</td>
-                    <td class="py-2 px-3 text-inst-text-light">${formatDate(docData.sanctionDate)}</td>
-                    <td class="py-2 px-3 text-inst-text-light" title="${keywords}">${keywords.substring(0, 25)}${keywords.length > 25 ? '...' : ''}</td>
-                    <td class="py-2 px-3 whitespace-nowrap">
-                        <button class="view-btn text-sky-600 hover:text-sky-800 p-1 rounded" data-id="${docData.id}" title="Ver"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg></button>
-                        ${canEdit ? `
-                        <button class="edit-btn text-kumera-600 hover:text-kumera-800 p-1 rounded" data-id="${docData.id}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
-                        <button class="delete-btn text-red-600 hover:text-red-800 p-1 rounded" data-id="${docData.id}" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
-                        ` : ''}
-                    </td>`;
-                // Añadir listeners a los botones de la fila
+                // Para la vista de "Orden del Día", solo mostramos nombre y fecha.
+                if (isOrdenDelDia) {
+                    tr.innerHTML = `
+                        <td class="py-2 px-3 text-inst-text-light font-medium">${docData.fileName}</td>
+                        <td class="py-2 px-3 text-inst-text-light">${formatDate(docData.sanctionDate)}</td>
+                        <td class="py-2 px-3 whitespace-nowrap">
+                            <button class="view-btn text-sky-600 hover:text-sky-800 p-1 rounded" data-id="${docData.id}" title="Ver"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg></button>
+                            ${canEdit ? `
+                            <button class="edit-btn text-kumera-600 hover:text-kumera-800 p-1 rounded" data-id="${docData.id}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
+                            <button class="delete-btn text-red-600 hover:text-red-800 p-1 rounded" data-id="${docData.id}" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
+                            ` : ''}
+                        </td>`;
+                } else {
+                     tr.innerHTML = `
+                        <td class="py-2 px-3 text-inst-text-light font-medium">${docData.fileName}</td>
+                        <td class="py-2 px-3 text-inst-text-light">${docData.category || 'N/A'}</td>
+                        <td class="py-2 px-3 text-inst-text-light">${docData.subcategory || 'N/A'}</td>
+                        <td class="py-2 px-3 text-inst-text-light">${formatDate(docData.sanctionDate)}</td>
+                        <td class="py-2 px-3 text-inst-text-light" title="${keywords}">${keywords.substring(0, 25)}${keywords.length > 25 ? '...' : ''}</td>
+                        <td class="py-2 px-3 whitespace-nowrap">
+                            <button class="view-btn text-sky-600 hover:text-sky-800 p-1 rounded" data-id="${docData.id}" title="Ver"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg></button>
+                            ${canEdit ? `
+                            <button class="edit-btn text-kumera-600 hover:text-kumera-800 p-1 rounded" data-id="${docData.id}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
+                            <button class="delete-btn text-red-600 hover:text-red-800 p-1 rounded" data-id="${docData.id}" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
+                            ` : ''}
+                        </td>`;
+                }
+                
                 tr.querySelector('.view-btn').addEventListener('click', (e) => handleView(e.currentTarget.dataset.id));
                  if (canEdit) {
                     tr.querySelector('.edit-btn')?.addEventListener('click', (e) => handleEdit(e.currentTarget.dataset.id));
@@ -461,7 +563,33 @@
             }
 
 
-            // --- Lógica del Calendario ---
+            // --- Lógica del Calendario y Vista de Órdenes del Día ---
+            async function renderOrdenesDelDiaAsList() {
+                loadingIndicator.classList.remove('hidden');
+                ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Cargando...</td></tr>';
+
+                try {
+                    const q = query(collection(db, `artifacts/${appId}/public/data/digital_library_files`), where("subcategory", "==", "Orden del Día"), orderBy("sanctionDate", "desc"));
+                    const snapshot = await getDocs(q);
+                    
+                    if (snapshot.empty) {
+                        ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">No hay órdenes del día.</td></tr>';
+                        return;
+                    }
+                    
+                    ordenesTableBody.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const row = createTableRow({ id: doc.id, ...doc.data() }, true);
+                        ordenesTableBody.appendChild(row);
+                    });
+                } catch (error) {
+                    console.error("Error cargando lista de órdenes del día:", error);
+                    ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-red-500">Error al cargar la lista. Puede que falte un índice en la base de datos.</td></tr>';
+                } finally {
+                    loadingIndicator.classList.add('hidden');
+                }
+            }
+            
             function populateDateSelectors() {
                 const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
                 const currentYear = new Date().getFullYear();
@@ -523,8 +651,6 @@
                     const snapshot = await getDocs(q);
                     snapshot.forEach(doc => {
                         const data = doc.data();
-                        // Se corrige el manejo de la fecha para evitar problemas de zona horaria,
-                        // asegurando que el documento aparezca en el día correcto.
                         const date = new Date(data.sanctionDate);
                         const offset = date.getTimezoneOffset();
                         date.setMinutes(date.getMinutes() + offset);
@@ -552,11 +678,9 @@
                     if (hasDocs) {
                         const docCount = dayDocs.length;
                         let indicators = '';
-                        // Muestra hasta 3 puntos
                         for(let i = 0; i < Math.min(docCount, 3); i++) {
                             indicators += '<span class="doc-indicator"></span>';
                         }
-                        // Si hay más de 3, muestra un '+'
                         if (docCount > 3) {
                             indicators += `<span class="doc-indicator-more">+</span>`;
                         }
@@ -635,10 +759,24 @@
 
                     document.querySelectorAll('.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
                     header.classList.add(sortState.direction === 'asc' ? 'sort-asc' : 'sort-desc');
-                    
-                    // Recargar los documentos desde el principio con el nuevo orden
                     loadDocuments(); 
                 });
+            });
+            
+            // Listeners Órdenes del Día
+            toggleOrdenesViewBtn.addEventListener('click', () => {
+                if (ordenesViewMode === 'calendar') {
+                    ordenesViewMode = 'list';
+                    toggleOrdenesViewBtn.textContent = 'Volver a Vista Calendario';
+                    ordenesCalendarContainer.classList.add('hidden');
+                    ordenesListContainer.classList.remove('hidden');
+                    renderOrdenesDelDiaAsList();
+                } else {
+                    ordenesViewMode = 'calendar';
+                    toggleOrdenesViewBtn.textContent = 'Vista por Listado';
+                    ordenesCalendarContainer.classList.remove('hidden');
+                    ordenesListContainer.classList.add('hidden');
+                }
             });
 
             // Navegación del Calendario
@@ -667,6 +805,13 @@
                 if (target && target.dataset.date) {
                     displayDailyDocs(target.dataset.date, target);
                 }
+            });
+
+            // Listeners Log de Actividad
+            viewLogBtn.addEventListener('click', () => showView('activityLog'));
+            backToAdminBtn.addEventListener('click', () => showView('userAdmin'));
+            [logUserFilter, logDateFilter, logActionFilter, logDetailsFilter].forEach(el => {
+                el.addEventListener('input', debounce(renderActivityLog, 400));
             });
 
             // Navegación Sidebar
@@ -710,7 +855,7 @@
                 batchMonthSelect.value = '';
                 batchYearSelect.value = '';
                 batchScopeSelect.value = '';
-
+                
                 confirmBatchImportBtn.disabled = false;
                 cancelBatchImportBtn.disabled = false;
             });
@@ -724,6 +869,13 @@
             batchCategorySelect.addEventListener('change', () => {
                 const selectedCategory = batchCategorySelect.value;
                 batchSubcategorySelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
+                // Reutilizamos el mapa de subcategorías
+                 const subcategoryMap = {
+                    "Legislación": ["Tratados Internacionales", "Constitución Nacional", "Leyes Nacionales", "Códigos", "Decretos Nacionales", "Constitución Provincial", "Leyes Provinciales", "Decretos Provinciales", "Resoluciones Ministeriales"],
+                    "Doctrina": [],
+                    "Jurisprudencia": ["Internacional", "Nacional", "Federal", "Provincial"],
+                    "Institucional": ["Orden del Día", "Disposiciones", "Memos", "Protocolos", "Comunicaciones"]
+                };
                 if (selectedCategory && subcategoryMap[selectedCategory]?.length > 0) {
                     subcategoryMap[selectedCategory].forEach(subCat => batchSubcategorySelect.add(new Option(subCat, subCat)));
                     batchSubcategorySelect.disabled = false;
@@ -821,6 +973,7 @@
             const loginSuccess = (user) => {
                 userRole = user.role;
                 userId = user.id || user.dni; 
+                currentUserName = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
                 currentUserDocId = user.docId;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
@@ -828,11 +981,14 @@
                 showView('welcome');
                 loadAllDocsForCount();
                 loadDocuments();
+                logUserActivity('login_success');
             };
             const logout = () => {
+                logUserActivity('logout'); // Registrar el logout ANTES de limpiar las variables de usuario
                 userRole = null;
                 userId = null;
                 currentUserDocId = null;
+                currentUserName = null;
                 loginView.classList.remove('hidden');
                 appContainer.classList.add('hidden');
                 updateUserUI(null);
@@ -852,16 +1008,22 @@
                 const docData = {
                     fileName, pdfLink, category: categorySelect.value, subcategory: subcategorySelect.disabled ? "" : subcategorySelect.value, documentNumber: document.getElementById('s_documentNumber').value.trim(), sanctionDate: document.getElementById('s_sanctionDate').value, promulgationDate: document.getElementById('s_promulgationDate').value, scope: scopeSelect.value, status: isDraft ? "Borrador" : (statusSelect.value || "Vigente"), userKeywords: userKeywordsInput.value.split(',').map(kw => kw.trim()).filter(Boolean), observations: observationsTextarea.value.trim(), timestamp: new Date().toISOString(), uploadedBy: userId,
                 };
+                
                 try {
+                    let action = '';
                     if (currentEditingDocId) {
+                        action = isDraft ? 'edit_draft' : 'edit_document';
                         const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, currentEditingDocId);
                         await setDoc(docRef, docData, { merge: true });
                         showModal('Documento actualizado correctamente.');
                     } else {
+                        action = isDraft ? 'create_draft' : 'create_document';
                         const collectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
-                        await addDoc(collectionRef, docData);
+                        const newDocRef = await addDoc(collectionRef, docData);
+                        currentEditingDocId = newDocRef.id; // Asignamos el ID por si se quiere registrar en el log
                         showModal(`Documento ${isDraft ? 'guardado como borrador' : 'guardado'}.`);
                     }
+                    logUserActivity(action, { documentId: currentEditingDocId, documentName: docData.fileName });
                     uploadForm.reset();
                     formPdfPreview.innerHTML = '';
                     currentEditingDocId = null;
@@ -890,7 +1052,7 @@
 
                 if (selectedYear !== "" && selectedMonth !== "") {
                     const monthStr = String(parseInt(selectedMonth, 10) + 1).padStart(2, '0');
-                    sanctionDate = `${selectedYear}-${monthStr}-01`; // Default al día 01 del mes
+                    sanctionDate = `${selectedYear}-${monthStr}-01`;
                 }
 
                 const driveRegex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
@@ -908,27 +1070,29 @@
 
                 let successes = 0;
                 let failures = 0;
+                let importedFileNames = [];
 
                 const importPromises = urls.map(async (url, index) => {
                     try {
                         batchImportProgress.textContent = `Procesando enlace ${index + 1} de ${urls.length}...`;
                         
+                        // Usamos un proxy CORS para obtener el título de la página de Google Drive
                         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                         const response = await fetch(proxyUrl);
-                        if (!response.ok) {
-                            throw new Error(`Error de red al buscar el título`);
-                        }
+                        if (!response.ok) throw new Error(`Error de red`);
                         const html = await response.text();
                         const titleMatch = html.match(/<title>(.*?)<\/title>/);
-                        let fileName = `Borrador - ${new Date().getTime()}`; // Nombre por defecto
+                        let fileName = `Borrador - ${new Date().getTime()}`;
                         if (titleMatch && titleMatch[1]) {
                             fileName = titleMatch[1].replace(/ - Google Drive$/, '').trim();
                         }
+                        importedFileNames.push(fileName);
 
                         const docData = {
                             fileName,
                             pdfLink: url,
-                            status: "Borrador",
+                            status: "Borrador", // Todos se guardan como borradores
+                            intendedStatus: "No se especifica", // Guardamos el estado final deseado.
                             timestamp: new Date().toISOString(),
                             uploadedBy: userId,
                             category: selectedCategory,
@@ -951,9 +1115,8 @@
                 });
 
                 await Promise.all(importPromises);
-
+                logUserActivity('batch_import', { successCount: successes, failCount: failures, files: importedFileNames });
                 batchImportModal.classList.add('hidden');
-                
                 showModal(`Importación completada. ${successes} documentos creados. ${failures > 0 ? `${failures} enlaces fallaron.` : ''}`);
             }
 
@@ -965,6 +1128,7 @@
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        logUserActivity('view_document', { documentId: docId, documentName: data.fileName });
                         detailFileName.textContent = data.fileName || 'N/A';
                         detailCategory.textContent = data.category || 'N/A';
                         detailSubcategory.textContent = data.subcategory || 'N/A';
@@ -983,11 +1147,11 @@
                             if (embeddableLink !== 'about:blank') {
                                 pdfPreviewContainer.innerHTML = `<iframe id="pdfPreviewFrame" src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
                             } else {
-                                pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg><p>Enlace de Drive no válido para previsualización.</p></div>`;
+                                pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><p>Enlace de Drive no válido.</p></div>`;
                             }
                         } else {
                             detailOpenDriveLink.classList.add('hidden');
-                            pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><p>No hay documento adjunto.</p></div>`;
+                            pdfPreviewContainer.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg"><p>No hay documento adjunto.</p></div>`;
                         }
 
                         if (userRole === 'admin') {
@@ -1028,7 +1192,16 @@
                         categorySelect.dispatchEvent(new Event('change'));
                         setTimeout(() => { subcategorySelect.value = data.subcategory || ''; }, 100);
                         scopeSelect.value = data.scope || '';
-                        statusSelect.value = data.status || 'Vigente';
+                        
+                        // Lógica mejorada para el estado
+                        if (data.status === 'Borrador') {
+                            // Si es un borrador, usamos el estado pre-cargado o un valor por defecto.
+                            statusSelect.value = data.intendedStatus || 'No se especifica';
+                        } else {
+                            // Para documentos ya publicados, usamos su estado actual.
+                            statusSelect.value = data.status || 'Vigente';
+                        }
+
                         document.getElementById('s_documentNumber').value = data.documentNumber || '';
                         document.getElementById('s_sanctionDate').value = data.sanctionDate || '';
                         document.getElementById('s_promulgationDate').value = data.promulgationDate || '';
@@ -1048,13 +1221,19 @@
                     loadingIndicator.classList.add('hidden');
                 }
             }
-            function handleDelete(docId) {
+            async function handleDelete(docId) {
                 if (userRole !== 'admin') return;
+                
+                // Obtenemos el nombre del documento ANTES de eliminarlo para el log
+                const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
+                const docSnap = await getDoc(docRef);
+                const docName = docSnap.exists() ? docSnap.data().fileName : 'ID desconocido';
+                
                 showConfirmationModal('¿Está seguro de que desea eliminar este documento? Esta acción no se puede deshacer.', async () => {
                     loadingIndicator.classList.remove('hidden');
-                    const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
                     try {
                         await deleteDoc(docRef);
+                        logUserActivity('delete_document', { documentId: docId, documentName: docName });
                         showModal('Documento eliminado correctamente.');
                         if (currentViewingDocId === docId) showView('list');
                     } catch (error) {
@@ -1097,7 +1276,6 @@
                     const snapshot = await getDocs(q);
                     if (snapshot.empty) {
                         loginMessage.textContent = 'Usuario o contraseña incorrectos.';
-                        loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
                         loginMessage.classList.remove('hidden');
                         return;
                     }
@@ -1107,13 +1285,11 @@
                         loginSuccess({docId: userDoc.id, ...userData});
                     } else {
                         loginMessage.textContent = 'Usuario o contraseña incorrectos.';
-                        loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
                         loginMessage.classList.remove('hidden');
                     }
                 } catch (error) {
                     console.error("Error de login:", error);
-                    loginMessage.textContent = 'Error al intentar iniciar sesión. Verifique la conexión.';
-                    loginMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
+                    loginMessage.textContent = 'Error al intentar iniciar sesión.';
                     loginMessage.classList.remove('hidden');
                 }
             });
@@ -1129,7 +1305,7 @@
             adminUsersBtn.addEventListener('click', () => showView('userAdmin'));
             categorySelect.addEventListener('change', () => {
                 const selectedCategory = categorySelect.value;
-                subcategorySelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
+                subcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
                 if (selectedCategory && subcategoryMap[selectedCategory]?.length > 0) {
                     subcategoryMap[selectedCategory].forEach(subCat => subcategorySelect.add(new Option(subCat, subCat)));
                     subcategorySelect.disabled = false;
@@ -1187,6 +1363,7 @@
                 if (!firstName || !lastName || !dni || !password || !role) { showModal('Todos los campos son obligatorios.'); return; }
                 try {
                     await addDoc(collection(db, `artifacts/${appId}/public/data/users`), { firstName, lastName, dni, password, role });
+                    logUserActivity('create_user', { createdUserDni: dni, createdUserName: `${firstName} ${lastName}` });
                     showModal(`Usuario "${firstName} ${lastName}" creado.`);
                     userAdminForm.reset();
                     renderUsers();
@@ -1202,7 +1379,7 @@
                 if(embeddableLink !== 'about:blank') {
                     formPdfPreview.innerHTML = `<iframe src="${embeddableLink}" class="w-full h-full" title="Vista Previa PDF"></iframe>`;
                 } else {
-                    formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><p>Enlace de Drive no válido. Asegúrate de que sea un enlace de archivo compartido.</p></div>`;
+                    formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><p>Enlace no válido.</p></div>`;
                 }
             });
             changePasswordBtn.addEventListener('click', () => {
@@ -1219,63 +1396,63 @@
                 const confirmPassword = confirmPasswordInput.value;
                 if (newPassword !== confirmPassword) {
                     changePasswordMessage.textContent = 'Las contraseñas no coinciden.';
-                    changePasswordMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
                     changePasswordMessage.classList.remove('hidden');
                     return;
                 }
                 if (newPassword.length < 6) {
                     changePasswordMessage.textContent = 'La contraseña debe tener al menos 6 caracteres.';
-                    changePasswordMessage.className = 'mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800';
                     changePasswordMessage.classList.remove('hidden');
                     return;
                 }
                 if (!currentUserDocId) {
-                    showModal('La contraseña del admin no se puede cambiar desde esta interfaz.');
+                    showModal('La contraseña del admin no se puede cambiar aquí.');
                     return;
                 }
                 try {
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
                     await updateDoc(userRef, { password: newPassword });
-                    showModal('Contraseña actualizada correctamente.');
+                    logUserActivity('change_password_self');
+                    showModal('Contraseña actualizada.');
                     changePasswordModal.classList.add('hidden');
                     changePasswordForm.reset();
                 } catch (error) {
                     console.error("Error al cambiar la contraseña:", error);
-                    showModal(`Error al cambiar la contraseña: ${error.message}`);
+                    showModal(`Error: ${error.message}`);
                 }
             });
             userTableBody.addEventListener('click', async (e) => {
                 const target = e.target.closest('button');
                 if (!target) return;
-                const userId = target.dataset.id;
-                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                const docId = target.dataset.id;
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, docId);
+                const userDocSnap = await getDoc(userDocRef);
+                const targetUserData = userDocSnap.data();
+                const targetUserInfo = { userId: targetUserData.dni, userName: `${targetUserData.firstName} ${targetUserData.lastName}` };
                 
                 if (target.classList.contains('reset-password-btn')) {
-                    showConfirmationModal('¿Blanquear la contraseña de este usuario a "0000"?', async () => {
+                    showConfirmationModal('¿Blanquear la contraseña a "0000"?', async () => {
                         await updateDoc(userDocRef, { password: '0000' });
+                        logUserActivity('reset_password_other', targetUserInfo);
                         showModal('Contraseña blanqueada.');
                         renderUsers();
                     });
                 } else if (target.classList.contains('toggle-role-btn')) {
-                    const userDocSnap = await getDoc(userDocRef);
-                    const currentRole = userDocSnap.data()?.role;
+                    const currentRole = targetUserData.role;
                     let newRole;
-                    // Ciclo de roles: admin -> asesor legal -> user -> admin
-                    if (currentRole === 'admin') {
-                        newRole = 'asesor legal';
-                    } else if (currentRole === 'asesor legal') {
-                        newRole = 'user';
-                    } else { // user u otro
-                        newRole = 'admin';
-                    }
+                    if (currentRole === 'admin') newRole = 'asesor legal';
+                    else if (currentRole === 'asesor legal') newRole = 'user';
+                    else newRole = 'admin';
+                    
                     showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
                         await updateDoc(userDocRef, { role: newRole });
+                        logUserActivity('change_role_other', { ...targetUserInfo, oldRole: currentRole, newRole: newRole });
                         showModal('Rol de usuario cambiado.');
                         renderUsers();
                     });
                 } else if (target.classList.contains('delete-user-btn')) {
-                    showConfirmationModal('¿Está seguro de que desea eliminar este usuario?', async () => {
+                    showConfirmationModal('¿Está seguro de eliminar este usuario?', async () => {
                         await deleteDoc(userDocRef);
+                        logUserActivity('delete_user', targetUserInfo);
                         showModal('Usuario eliminado.');
                         renderUsers();
                     });
@@ -1310,7 +1487,7 @@
                     </div>
                     <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Ingresar</button>
                     <p class="text-sm text-gray-500 pt-2">Contacte al administrador para obtener credenciales.</p>
-                    <div id="loginMessage" class="mt-2 p-3 rounded-lg text-sm hidden"></div>
+                    <div id="loginMessage" class="mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800 hidden"></div>
                 </form>
             </div>
         </div>
@@ -1546,38 +1723,52 @@
                     </div>
                 </div>
 
-                <!-- Nueva Vista de Órdenes Internas -->
+                <!-- Vista de Órdenes del Día -->
                 <div id="ordenesInternasView" class="hidden">
                      <h2 class="text-3xl font-bold text-inst-dark mb-4">Órdenes del Día</h2>
                      <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-                        <div class="flex items-center justify-between mb-4 pb-4 border-b gap-4">
-                            <button id="prevMonthBtn" class="p-2 rounded-full hover:bg-kumera-100 flex-shrink-0">&lt;</button>
-                            <div class="flex-grow flex items-center justify-center gap-2">
-                                <select id="monthSelector" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500"></select>
-                                <select id="yearSelector" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500"></select>
-                            </div>
-                            <button id="nextMonthBtn" class="p-2 rounded-full hover:bg-kumera-100 flex-shrink-0">&gt;</button>
+                        <div class="flex justify-end mb-4">
+                            <button id="toggleOrdenesViewBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-all duration-300">Vista por Listado</button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <div class="grid grid-cols-7 gap-1 text-center font-semibold text-xs text-gray-500 mb-2">
-                                    <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+                        <div id="ordenesCalendarContainer">
+                             <div class="flex items-center justify-between mb-4 pb-4 border-b gap-4">
+                                <button id="prevMonthBtn" class="p-2 rounded-full hover:bg-kumera-100 flex-shrink-0">&lt;</button>
+                                <div class="flex-grow flex items-center justify-center gap-2">
+                                    <select id="monthSelector" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500"></select>
+                                    <select id="yearSelector" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500"></select>
                                 </div>
-                                <div id="calendarGrid" class="grid grid-cols-7 gap-1">
-                                    <!-- Días del calendario se generan aquí -->
-                                </div>
+                                <button id="nextMonthBtn" class="p-2 rounded-full hover:bg-kumera-100 flex-shrink-0">&gt;</button>
                             </div>
-                            <div id="dailyDocsContainer" class="border-l pl-6 overflow-y-auto max-h-[600px]">
-                                <!-- Documentos del día seleccionado se muestran aquí -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <div class="grid grid-cols-7 gap-1 text-center font-semibold text-xs text-gray-500 mb-2">
+                                        <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+                                    </div>
+                                    <div id="calendarGrid" class="grid grid-cols-7 gap-1"></div>
+                                </div>
+                                <div id="dailyDocsContainer" class="border-l pl-6 overflow-y-auto max-h-[600px]"></div>
+                            </div>
+                            <div id="calendarLoading" class="text-center py-4 hidden">
+                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-kumera-500 mx-auto"></div>
                             </div>
                         </div>
-                        <div id="calendarLoading" class="text-center py-4 hidden">
-                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-kumera-500 mx-auto"></div>
+                        <div id="ordenesListContainer" class="hidden">
+                            <div class="bg-white rounded-xl shadow-lg overflow-x-auto border border-gray-200">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="py-3 px-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nombre</th>
+                                            <th class="py-3 px-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fecha</th>
+                                            <th class="py-3 px-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ordenesTableBody" class="divide-y divide-gray-200 bg-white"></tbody>
+                                </table>
+                            </div>
                         </div>
                      </div>
                 </div>
-
-                <!-- Vistas de Formulario, Detalle, etc. (Restauradas) -->
+                <!-- Vistas de Formulario, Detalle, etc. -->
                 <div id="documentFormView" class="hidden">
                     <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg max-w-4xl mx-auto border border-gray-200">
                         <h2 id="formTitle" class="text-2xl font-semibold text-inst-dark mb-6 border-b pb-4 border-gray-300"></h2>
@@ -1676,9 +1867,7 @@
                             </button>
                         </div>
                         
-                        <div id="pdfPreviewContainer" class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 h-[75vh] shadow-inner">
-                            <!-- iframe va aquí -->
-                        </div>
+                        <div id="pdfPreviewContainer" class="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 h-[75vh] shadow-inner"></div>
 
                         <div class="mt-6 border-t pt-4">
                              <h4 class="font-semibold text-gray-700 mb-4 text-lg">Detalles</h4>
@@ -1698,7 +1887,6 @@
                              </div>
                         </div>
                         
-                        <!-- Botones de Acción -->
                         <div class="flex items-center justify-end space-x-3 pt-5 border-t border-gray-200 mt-6">
                             <button id="detailEditBtn" data-id="" class="bg-kumera-500 hover:bg-kumera-600 text-white font-semibold py-2.5 px-5 rounded-lg hidden">Editar</button>
                             <button id="detailDeleteBtn" data-id="" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-5 rounded-lg hidden">Eliminar</button>
@@ -1739,6 +1927,12 @@
                                 <button type="submit" id="createUserBtn" class="md:col-span-2 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg">Crear</button>
                             </form>
                         </div>
+                        <div class="flex justify-end mb-6">
+                            <button id="viewLogBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center space-x-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 4H7a1 1 0 100 2h6a1 1 0 100-2zm-6 4h6a1 1 0 100 2H7a1 1 0 100-2z" clip-rule="evenodd" /></svg>
+                                <span>Ver Registro de Actividad</span>
+                            </button>
+                        </div>
                         <div>
                             <h3 class="text-xl font-semibold text-inst-dark mb-4">Usuarios Existentes</h3>
                             <div class="overflow-x-auto border rounded-lg">
@@ -1757,6 +1951,50 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Vista de Log de Actividad -->
+                 <div id="activityLogView" class="hidden">
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-200">
+                        <div class="flex justify-between items-center mb-6 border-b pb-4">
+                            <h2 class="text-3xl font-bold text-inst-dark">Registro de Actividad</h2>
+                            <button id="backToAdminBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm">Volver a Admin</button>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
+                            <div>
+                                <label for="logUserFilter" class="text-xs font-medium text-gray-600">Usuario</label>
+                                <select id="logUserFilter" class="w-full mt-1 p-2 border rounded-md text-sm"></select>
+                            </div>
+                             <div>
+                                <label for="logDateFilter" class="text-xs font-medium text-gray-600">Fecha</label>
+                                <input type="date" id="logDateFilter" class="w-full mt-1 p-2 border rounded-md text-sm">
+                            </div>
+                             <div>
+                                <label for="logActionFilter" class="text-xs font-medium text-gray-600">Acción</label>
+                                <input type="text" id="logActionFilter" placeholder="Ej: view_document" class="w-full mt-1 p-2 border rounded-md text-sm">
+                            </div>
+                             <div>
+                                <label for="logDetailsFilter" class="text-xs font-medium text-gray-600">Detalles</label>
+                                <input type="text" id="logDetailsFilter" placeholder="Nombre de archivo..." class="w-full mt-1 p-2 border rounded-md text-sm">
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto border rounded-lg">
+                            <table class="min-w-full divide-y">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Usuario</th>
+                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Acción</th>
+                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Detalles</th>
+                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Fecha y Hora</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="activityLogTableBody" class="divide-y bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </main>
         </div>
     </div>
@@ -1805,8 +2043,8 @@
     <!-- Modal de Importación por Lote -->
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-3xl w-full mx-auto border-t-4 border-blue-500">
-            <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar por Lote</h3>
-            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría, fecha y alcance. Todos los documentos se crearán como borradores.</p>
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar Borradores por Lote</h3>
+            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría, fecha, etc. Todos los documentos se crearán como borradores para su posterior revisión.</p>
             <div id="batchImportForm">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                     <!-- Fila 1 -->
