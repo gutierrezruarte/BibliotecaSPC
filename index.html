@@ -208,7 +208,6 @@
             const batchMonthSelect = document.getElementById('batchMonthSelect');
             const batchYearSelect = document.getElementById('batchYearSelect');
             const batchScopeSelect = document.getElementById('batchScopeSelect');
-            const batchStatusSelect = document.getElementById('batchStatusSelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -711,7 +710,6 @@
                 batchMonthSelect.value = '';
                 batchYearSelect.value = '';
                 batchScopeSelect.value = '';
-                batchStatusSelect.value = 'Borrador';
 
                 confirmBatchImportBtn.disabled = false;
                 cancelBatchImportBtn.disabled = false;
@@ -888,7 +886,6 @@
                 const selectedMonth = batchMonthSelect.value;
                 const selectedYear = batchYearSelect.value;
                 const selectedScope = batchScopeSelect.value;
-                const intendedStatus = batchStatusSelect.value; // El estado final deseado por el usuario.
                 let sanctionDate = "";
 
                 if (selectedYear !== "" && selectedMonth !== "") {
@@ -897,7 +894,6 @@
                 }
 
                 const driveRegex = /drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/;
-                // CORRECCIÓN: Se ajusta la división de texto para aceptar comas, espacios y saltos de línea como separadores.
                 const urls = linksText.split(/[,\s\n]+/).map(link => link.trim()).filter(link => link && driveRegex.test(link));
 
                 if (urls.length === 0) {
@@ -917,7 +913,6 @@
                     try {
                         batchImportProgress.textContent = `Procesando enlace ${index + 1} de ${urls.length}...`;
                         
-                        // Se usa un proxy CORS para obtener el título de la página de Drive
                         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                         const response = await fetch(proxyUrl);
                         if (!response.ok) {
@@ -933,7 +928,7 @@
                         const docData = {
                             fileName,
                             pdfLink: url,
-                            status: "Borrador", // Se guardan todos como borradores.
+                            status: "Borrador",
                             timestamp: new Date().toISOString(),
                             uploadedBy: userId,
                             category: selectedCategory,
@@ -944,7 +939,6 @@
                             scope: selectedScope,
                             userKeywords: [],
                             observations: "Importado por lote.",
-                            intendedStatus: intendedStatus, // Guardamos el estado final deseado.
                         };
 
                         const collectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
@@ -1034,15 +1028,7 @@
                         categorySelect.dispatchEvent(new Event('change'));
                         setTimeout(() => { subcategorySelect.value = data.subcategory || ''; }, 100);
                         scopeSelect.value = data.scope || '';
-                        
-                        // Si es un borrador importado por lote, usamos el estado pre-cargado.
-                        // De lo contrario, usamos el estado actual del documento.
-                        if (data.status === 'Borrador' && data.intendedStatus) {
-                            statusSelect.value = data.intendedStatus;
-                        } else {
-                            statusSelect.value = data.status || 'Vigente';
-                        }
-
+                        statusSelect.value = data.status || 'Vigente';
                         document.getElementById('s_documentNumber').value = data.documentNumber || '';
                         document.getElementById('s_sanctionDate').value = data.sanctionDate || '';
                         document.getElementById('s_promulgationDate').value = data.promulgationDate || '';
@@ -1381,7 +1367,7 @@
                         <!-- Menú Legislación -->
                         <div>
                             <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion">
-                                <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg><span class="sidebar-text">Legislación</span></span>
+                                <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3-5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg><span class="sidebar-text">Legislación</span></span>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
@@ -1820,7 +1806,7 @@
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-3xl w-full mx-auto border-t-4 border-blue-500">
             <h3 class="text-xl font-semibold text-inst-dark mb-3">Importar por Lote</h3>
-            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría, fecha, alcance y estado a todos.</p>
+            <p class="text-sm text-gray-600 mb-4">Pegue los enlaces de Google Drive. Puede pre-asignarles una categoría, fecha y alcance. Todos los documentos se crearán como borradores.</p>
             <div id="batchImportForm">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                     <!-- Fila 1 -->
@@ -1863,15 +1849,6 @@
                             <option value="Provincial">Provincial</option>
                         </select>
                     </div>
-                    <div>
-                        <label for="batchStatusSelect" class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                        <select id="batchStatusSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
-                            <option value="Borrador">Borrador (Por defecto)</option>
-                            <option value="Vigente">Vigente</option>
-                            <option value="Derogado">Derogado</option>
-                            <option value="No se especifica">No se especifica</option>
-                        </select>
-                    </div>
                 </div>
                 <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/..., https://drive.google.com/file/d/..."></textarea>
             </div>
@@ -1887,5 +1864,4 @@
     </div>
 </body>
 </html>
-
 
