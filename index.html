@@ -705,22 +705,33 @@
                 ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Cargando...</td></tr>';
 
                 try {
-                    const q = query(collection(db, `artifacts/${appId}/public/data/digital_library_files`), where("subcategory", "==", "Orden del Día"), orderBy("sanctionDate", "desc"));
+                    // CORRECCIÓN: Se elimina el orderBy de la consulta para evitar el error de índice.
+                    const q = query(collection(db, `artifacts/${appId}/public/data/digital_library_files`), where("subcategory", "==", "Orden del Día"));
                     const snapshot = await getDocs(q);
                     
                     if (snapshot.empty) {
                         ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">No hay órdenes del día.</td></tr>';
+                        loadingIndicator.classList.add('hidden');
                         return;
                     }
                     
+                    // Se mapean los documentos y se ordenan en el cliente por fecha de sanción.
+                    let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    docs.sort((a, b) => {
+                        const dateA = a.sanctionDate ? new Date(a.sanctionDate).getTime() : 0;
+                        const dateB = b.sanctionDate ? new Date(b.sanctionDate).getTime() : 0;
+                        return dateB - dateA; // Orden descendente (más reciente primero)
+                    });
+
                     ordenesTableBody.innerHTML = '';
-                    snapshot.forEach(doc => {
-                        const row = createTableRow({ id: doc.id, ...doc.data() }, true);
+                    docs.forEach(docData => {
+                        const row = createTableRow(docData, true);
                         ordenesTableBody.appendChild(row);
                     });
+
                 } catch (error) {
                     console.error("Error cargando lista de órdenes del día:", error);
-                    ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-red-500">Error al cargar la lista. Puede que falte un índice en la base de datos.</td></tr>';
+                    ordenesTableBody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-red-500">Error al cargar la lista.</td></tr>`;
                 } finally {
                     loadingIndicator.classList.add('hidden');
                 }
@@ -767,19 +778,18 @@
                 const year = calendarDate.getFullYear();
                 const month = calendarDate.getMonth();
                 
-                const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0=Domingo, 1=Lunes...
+                const firstDayOfMonth = new Date(year, month, 1).getDay();
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const adjustedFirstDay = (firstDayOfMonth === 0) ? 6 : firstDayOfMonth - 1; // 0=Lunes...
+                const adjustedFirstDay = (firstDayOfMonth === 0) ? 6 : firstDayOfMonth - 1;
 
-                // Obtener documentos del mes
-                const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-                const endDate = new Date(year, month, daysInMonth).toISOString().split('T')[0];
+                // Define el rango del mes actual para el filtro en el cliente
+                const startOfMonthTimestamp = new Date(year, month, 1).getTime();
+                const endOfMonthTimestamp = new Date(year, month, daysInMonth, 23, 59, 59, 999).getTime();
                 
+                // CORRECCIÓN: Se quita el filtro de fecha de la consulta a Firebase para evitar el error de índice.
                 const q = query(
                     collection(db, `artifacts/${appId}/public/data/digital_library_files`),
-                    where("subcategory", "==", "Orden del Día"),
-                    where("sanctionDate", ">=", startDate),
-                    where("sanctionDate", "<=", endDate)
+                    where("subcategory", "==", "Orden del Día")
                 );
                 
                 const docsByDay = {};
@@ -787,11 +797,20 @@
                     const snapshot = await getDocs(q);
                     snapshot.forEach(doc => {
                         const data = doc.data();
-                        const date = new Date(data.sanctionDate);
-                        const day = date.getUTCDate();
                         
-                        if (!docsByDay[day]) docsByDay[day] = [];
-                        docsByDay[day].push({ id: doc.id, ...data });
+                        // FILTRO POR FECHA EN EL CLIENTE:
+                        if (data.sanctionDate) {
+                            const sanctionDate = new Date(data.sanctionDate);
+                            // Se ajusta la fecha para evitar problemas de zona horaria (YYYY-MM-DD se interpreta como UTC).
+                            const adjustedDate = new Date(sanctionDate.getUTCFullYear(), sanctionDate.getUTCMonth(), sanctionDate.getUTCDate());
+                            const dateTimestamp = adjustedDate.getTime();
+
+                            if (dateTimestamp >= startOfMonthTimestamp && dateTimestamp <= endOfMonthTimestamp) {
+                                const day = adjustedDate.getDate();
+                                if (!docsByDay[day]) docsByDay[day] = [];
+                                docsByDay[day].push({ id: doc.id, ...data });
+                            }
+                        }
                     });
                 } catch(error) {
                     console.error("Error fetching calendar docs:", error);
