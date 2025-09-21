@@ -157,6 +157,7 @@
         let userId = null;
         let currentUserName = null;
         let currentUserDocId = null; 
+        let currentUserData = null;
         const ADMIN_USER = '36219951';
         const ADMIN_PASSWORD = 'Marquitos123';
 
@@ -1049,7 +1050,7 @@
             const newFileBtn = document.getElementById('newFileBtn');
             const adminUsersBtn = document.getElementById('adminUsersBtn');
             const signOutBtn = document.getElementById('signOutBtn');
-            const changePasswordBtn = document.getElementById('changePasswordBtn');
+            const profileBtn = document.getElementById('profileBtn');
             const draftsBtn = document.getElementById('draftsBtn');
             const uploadForm = document.getElementById('uploadForm');
             const formTitle = document.getElementById('formTitle');
@@ -1089,13 +1090,16 @@
             const confirmBtn = document.getElementById('confirmBtn');
             const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
             let confirmCallback = null;
-            const changePasswordModal = document.getElementById('changePasswordModal');
-            const changePasswordForm = document.getElementById('changePasswordForm');
+            const profileModal = document.getElementById('profileModal');
+            const profileForm = document.getElementById('profileForm');
             const newPasswordInput = document.getElementById('newPassword');
             const confirmPasswordInput = document.getElementById('confirmPassword');
-            const changePasswordMessage = document.getElementById('changePasswordMessage');
-            const cancelChangePasswordBtn = document.getElementById('cancelChangePasswordBtn');
+            const profileMessage = document.getElementById('profileMessage');
+            const cancelProfileBtn = document.getElementById('cancelProfileBtn');
             const formLoadingIndicator = document.getElementById('formLoadingIndicator');
+            const promptEmailModal = document.getElementById('promptEmailModal');
+            const promptEmailForm = document.getElementById('promptEmailForm');
+
             const subcategoryMap = {
                 "Legislación": ["Tratados Internacionales", "Constitución Nacional", "Leyes Nacionales", "Códigos", "Decretos Nacionales", "Constitución Provincial", "Leyes Provinciales", "Decretos Provinciales", "Resoluciones Ministeriales"],
                 "Doctrina": [],
@@ -1111,7 +1115,7 @@
                 if (user) {
                     authStatusDiv.textContent = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
                     signOutBtn.classList.remove('hidden');
-                    changePasswordBtn.classList.remove('hidden');
+                    profileBtn.classList.remove('hidden');
                     
                     if (user.role === 'admin') {
                         [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.remove('hidden'));
@@ -1123,7 +1127,7 @@
                     }
                 } else {
                     authStatusDiv.textContent = 'No Autenticado';
-                    [newFileBtn, adminUsersBtn, signOutBtn, changePasswordBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
+                    [newFileBtn, adminUsersBtn, signOutBtn, profileBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
                 }
             }
             const loginSuccess = (user) => {
@@ -1131,6 +1135,7 @@
                 userId = user.id || user.dni; 
                 currentUserName = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
                 currentUserDocId = user.docId;
+                currentUserData = user;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 updateUserUI(user);
@@ -1138,6 +1143,10 @@
                 loadAllDocsForCount();
                 loadDocuments();
                 logUserActivity('login_success');
+                
+                if (user.role !== 'admin' && (!user.gmail || user.gmail.trim() === '')) {
+                    promptEmailModal.classList.remove('hidden');
+                }
             };
             const logout = () => {
                 logUserActivity('logout'); // Registrar el logout ANTES de limpiar las variables de usuario
@@ -1145,6 +1154,7 @@
                 userId = null;
                 currentUserDocId = null;
                 currentUserName = null;
+                currentUserData = null;
                 loginView.classList.remove('hidden');
                 appContainer.classList.add('hidden');
                 updateUserUI(null);
@@ -1549,44 +1559,92 @@
                     formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><p>Enlace no válido.</p></div>`;
                 }
             });
-            changePasswordBtn.addEventListener('click', () => {
-                changePasswordModal.classList.remove('hidden');
+            profileBtn.addEventListener('click', () => {
+                profileModal.classList.remove('hidden');
+                document.getElementById('profileEmail').value = currentUserData.gmail || '';
+                profileForm.reset();
+                profileMessage.classList.add('hidden');
             });
-            cancelChangePasswordBtn.addEventListener('click', () => {
-                changePasswordModal.classList.add('hidden');
-                changePasswordForm.reset();
-                changePasswordMessage.classList.add('hidden');
+            cancelProfileBtn.addEventListener('click', () => {
+                profileModal.classList.add('hidden');
+                profileForm.reset();
+                profileMessage.classList.add('hidden');
             });
-            changePasswordForm.addEventListener('submit', async (e) => {
+            profileForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                const newEmail = document.getElementById('profileEmail').value.trim();
                 const newPassword = newPasswordInput.value;
                 const confirmPassword = confirmPasswordInput.value;
-                if (newPassword !== confirmPassword) {
-                    changePasswordMessage.textContent = 'Las contraseñas no coinciden.';
-                    changePasswordMessage.classList.remove('hidden');
-                    return;
+                
+                const updateData = {};
+                let passwordChanged = false;
+
+                if (newPassword || confirmPassword) {
+                    if (newPassword !== confirmPassword) {
+                        profileMessage.textContent = 'Las contraseñas no coinciden.';
+                        profileMessage.classList.remove('hidden');
+                        return;
+                    }
+                    if (newPassword.length < 6) {
+                        profileMessage.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+                        profileMessage.classList.remove('hidden');
+                        return;
+                    }
+                    updateData.password = newPassword;
+                    passwordChanged = true;
                 }
-                if (newPassword.length < 6) {
-                    changePasswordMessage.textContent = 'La contraseña debe tener al menos 6 caracteres.';
-                    changePasswordMessage.classList.remove('hidden');
-                    return;
+
+                if (newEmail !== (currentUserData.gmail || '')) {
+                    updateData.gmail = newEmail;
                 }
+                
+                if (Object.keys(updateData).length === 0) {
+                    profileModal.classList.add('hidden');
+                    return; 
+                }
+
                 if (!currentUserDocId) {
-                    showModal('La contraseña del admin no se puede cambiar aquí.');
+                    if (passwordChanged) {
+                        showModal('La contraseña del admin no se puede cambiar aquí.');
+                    }
                     return;
                 }
+
                 try {
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
-                    await updateDoc(userRef, { password: newPassword });
-                    logUserActivity('change_password_self');
-                    showModal('Contraseña actualizada.');
-                    changePasswordModal.classList.add('hidden');
-                    changePasswordForm.reset();
+                    await updateDoc(userRef, updateData);
+                    
+                    if (updateData.gmail) currentUserData.gmail = updateData.gmail;
+
+                    logUserActivity('update_profile', { changedFields: Object.keys(updateData) });
+                    showModal('Perfil actualizado correctamente.');
+                    profileModal.classList.add('hidden');
                 } catch (error) {
-                    console.error("Error al cambiar la contraseña:", error);
+                    console.error("Error al actualizar perfil:", error);
                     showModal(`Error: ${error.message}`);
                 }
             });
+
+            promptEmailForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const newEmail = document.getElementById('promptEmailInput').value.trim();
+                if (!newEmail || !currentUserDocId) return;
+
+                try {
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
+                    await updateDoc(userRef, { gmail: newEmail });
+                    
+                    currentUserData.gmail = newEmail;
+                    
+                    showModal('Email actualizado correctamente.');
+                    promptEmailModal.classList.add('hidden');
+                    logUserActivity('add_initial_email');
+                } catch (error) {
+                    console.error("Error al actualizar email inicial:", error);
+                    showModal(`Error: ${error.message}`);
+                }
+            });
+
             userTableBody.addEventListener('click', async (e) => {
                 const target = e.target.closest('button');
                 if (!target) return;
@@ -1777,9 +1835,9 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.82 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.82 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.82-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.82-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                         <span class="sidebar-text">Admin Usuarios</span>
                     </a>
-                    <button id="changePasswordBtn" class="w-full flex items-center justify-center space-x-2 bg-kumera-600 hover:bg-kumera-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
-                        <span class="custom-icon">↻</span>
-                        <span class="sidebar-text">Cambiar Contraseña</span>
+                    <button id="profileBtn" class="w-full flex items-center justify-center space-x-2 bg-kumera-600 hover:bg-kumera-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                        <span class="custom-icon">👤</span>
+                        <span class="sidebar-text">Administrar Perfil</span>
                     </button>
                     <button id="signOutBtn" class="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>
@@ -2247,27 +2305,47 @@
             </div>
         </div>
     </div>
-    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
+    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-kumera-500">
-            <h3 class="text-xl font-semibold text-inst-dark mb-3">Cambiar Contraseña</h3>
-            <form id="changePasswordForm" class="space-y-4">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Administrar Perfil</h3>
+            <form id="profileForm" class="space-y-4">
+                <div>
+                    <label for="profileEmail" class="block text-sm font-medium text-gray-700">Cuenta de Gmail</label>
+                    <input type="email" id="profileEmail" class="w-full mt-1 px-4 py-2.5 border rounded-lg">
+                </div>
+                <div class="border-t my-4"></div>
+                <p class="text-sm text-gray-500 -mt-2 mb-2">Deje los campos de contraseña en blanco si no desea cambiarla.</p>
                 <div>
                     <label for="newPassword" class="block text-sm font-medium text-gray-700">Nueva Contraseña</label>
-                    <input type="password" id="newPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
+                    <input type="password" id="newPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg">
                 </div>
                 <div>
                     <label for="confirmPassword" class="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
-                    <input type="password" id="confirmPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
+                    <input type="password" id="confirmPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg">
                 </div>
-                <div id="changePasswordMessage" class="hidden text-sm text-red-600"></div>
+                <div id="profileMessage" class="hidden text-sm text-red-600"></div>
                 <div class="mt-6 flex justify-end space-x-3">
-                    <button id="cancelChangePasswordBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                    <button id="cancelProfileBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
                     <button type="submit" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Guardar</button>
                 </div>
             </form>
         </div>
     </div>
-
+     <div id="promptEmailModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-[102] p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-kumera-500">
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Actualice su Perfil</h3>
+            <p class="text-sm text-gray-600 mb-4">Por favor, registre su cuenta de Gmail para continuar.</p>
+            <form id="promptEmailForm" class="space-y-4">
+                <div>
+                    <label for="promptEmailInput" class="block text-sm font-medium text-gray-700">Cuenta de Gmail</label>
+                    <input type="email" id="promptEmailInput" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
+                </div>
+                <div class="mt-6 text-right">
+                    <button type="submit" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <!-- Modal de Importación por Lote -->
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-3xl w-full mx-auto border-t-4 border-blue-500">
