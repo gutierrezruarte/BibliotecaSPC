@@ -7,8 +7,6 @@
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Configuración de colores personalizados para Tailwind CSS -->
     <script>
@@ -138,8 +136,8 @@
     </style>
     <script type="module">
         // Importaciones de Firebase
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, updateDoc, orderBy, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, updateDoc, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCYxPVi2VV3LuCxpKr-YNdJ0zCUKPbkcLg",
@@ -155,9 +153,7 @@
         let app, db;
         let userRole = null;
         let userId = null;
-        let currentUserName = null;
         let currentUserDocId = null; 
-        let currentUserData = null;
         const ADMIN_USER = '36219951';
         const ADMIN_PASSWORD = 'Marquitos123';
 
@@ -170,16 +166,11 @@
         let unsubscribe;
         let allDocsCache = []; // Caché para documentos de la lista principal
         let fullDocsCache = []; // Caché para todos los documentos (para los contadores)
-        let allLogsCache = []; // Caché para registros de actividad
         let unsubscribeCounts; // Listener para los contadores
         let sortState = { field: 'timestamp', direction: 'desc' };
         let columnFilters = {};
         let calendarDate = new Date(); // Para la vista de calendario
-        let ordenesViewMode = 'calendar'; // 'calendar' o 'list'
-
-        // Instancias de gráficos para el dashboard de métricas
-        let categoryChartInstance = null;
-        let subcategoryChartInstance = null;
+        let ordenesViewMode = 'calendar'; // o 'list'
 
         document.addEventListener('DOMContentLoaded', async () => {
             // --- Referencias a Elementos del DOM ---
@@ -188,8 +179,6 @@
             const documentFormView = document.getElementById('documentFormView');
             const documentDetailView = document.getElementById('documentDetailView');
             const userAdminView = document.getElementById('userAdminView');
-            const activityLogView = document.getElementById('activityLogView');
-            const metricsView = document.getElementById('metricsView');
             const ordenesInternasView = document.getElementById('ordenesInternasView');
             const loginView = document.getElementById('loginView');
             const appContainer = document.getElementById('appContainer');
@@ -197,7 +186,7 @@
             const documentsTableBody = document.getElementById('documentsTableBody');
             const searchInput = document.getElementById('searchInput');
             
-            // --- Referencias a Elementos de Órdenes del Día ---
+            // --- Referencias a Elementos del Calendario ---
             const calendarGrid = document.getElementById('calendarGrid');
             const monthSelector = document.getElementById('monthSelector');
             const yearSelector = document.getElementById('yearSelector');
@@ -209,20 +198,6 @@
             const ordenesCalendarContainer = document.getElementById('ordenesCalendarContainer');
             const ordenesListContainer = document.getElementById('ordenesListContainer');
             const ordenesTableBody = document.getElementById('ordenesTableBody');
-
-            // --- Referencias a Elementos de Log de Actividad ---
-            const viewLogBtn = document.getElementById('viewLogBtn');
-            const backToAdminBtn = document.getElementById('backToAdminBtn');
-            const activityLogTableBody = document.getElementById('activityLogTableBody');
-            const logUserFilter = document.getElementById('logUserFilter');
-            const logDateFilter = document.getElementById('logDateFilter');
-            const logActionFilter = document.getElementById('logActionFilter');
-            const logDetailsFilter = document.getElementById('logDetailsFilter');
-            
-            // --- Referencias a Elementos de Métricas ---
-            const sidebarMetricsBtn = document.getElementById('sidebarMetricsBtn');
-            const backToAdminFromMetricsBtn = document.getElementById('backToAdminFromMetricsBtn');
-
 
             // --- Referencias a Elementos de Importación por Lote ---
             const batchImportBtn = document.getElementById('batchImportBtn');
@@ -238,14 +213,7 @@
             const batchMonthSelect = document.getElementById('batchMonthSelect');
             const batchYearSelect = document.getElementById('batchYearSelect');
             const batchScopeSelect = document.getElementById('batchScopeSelect');
-            
-            // --- Referencias a Elementos de Edición de Usuario ---
-            const editUserModal = document.getElementById('editUserModal');
-            const editUserForm = document.getElementById('editUserForm');
-            const editUserEmail = document.getElementById('editUserEmail');
-            const editUserId = document.getElementById('editUserId');
-            const editUserModalTitle = document.getElementById('editUserModalTitle');
-            const cancelEditUserBtn = document.getElementById('cancelEditUserBtn');
+            const batchStatusSelect = document.getElementById('batchStatusSelect');
 
             // --- Inicialización de Firebase ---
             try {
@@ -258,29 +226,12 @@
             }
             
             // --- Funciones de la Aplicación ---
-            const formatDate = (d, includeTime = false) => {
+            const formatDate = (d) => {
                 if (!d) return 'N/A';
-                
                 const date = new Date(d);
-                
-                if (!includeTime && d.indexOf('T') === -1) {
-                     date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
-                }
-
-                const options = {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                };
-
-                if (includeTime) {
-                    options.hour = '2-digit';
-                    options.minute = '2-digit';
-                    options.second = '2-digit';
-                    options.timeZone = 'America/Argentina/Buenos_Aires';
-                }
-
-                return date.toLocaleString('es-AR', options);
+                const offset = date.getTimezoneOffset();
+                date.setMinutes(date.getMinutes() + offset);
+                return date.toLocaleDateString('es-ES');
             };
             
             function getEmbeddableDriveLink(url) {
@@ -295,216 +246,24 @@
             }
 
             function showView(viewToShow) {
-                [welcomeView, documentListView, documentFormView, documentDetailView, userAdminView, ordenesInternasView, activityLogView, metricsView].forEach(view => view.classList.add('hidden'));
+                [welcomeView, documentListView, documentFormView, documentDetailView, userAdminView, ordenesInternasView].forEach(view => view.classList.add('hidden'));
                 const viewMap = { 
                     'welcome': welcomeView,
                     'list': documentListView, 
                     'form': documentFormView, 
                     'detail': documentDetailView, 
                     'userAdmin': userAdminView, 
-                    'activityLog': activityLogView,
-                    'metrics': metricsView,
                     'ordenesInternas': ordenesInternasView
                 };
                 const viewElement = viewMap[viewToShow] || welcomeView;
                 viewElement.classList.remove('hidden');
 
                 if (viewToShow === 'userAdmin') renderUsers();
-                if (viewToShow === 'activityLog') loadAndRenderActivityLog();
-                if (viewToShow === 'metrics') renderMetricsDashboard();
                 if (viewToShow === 'ordenesInternas') {
                     populateDateSelectors();
                     renderCalendar();
                 }
             }
-            
-            // --- Lógica de Registro de Actividad ---
-            async function logUserActivity(action, details = {}) {
-                if (!userId || !currentUserName) return; // No registrar si no hay un usuario logueado
-                try {
-                    const logData = {
-                        userId,
-                        userName: currentUserName,
-                        action,
-                        timestamp: new Date().toISOString(),
-                        details,
-                    };
-                    await addDoc(collection(db, `artifacts/${appId}/public/data/activity_logs`), logData);
-                } catch (error) {
-                    console.error("Error al registrar actividad:", error);
-                }
-            }
-
-            async function loadAndRenderActivityLog() {
-                loadingIndicator.classList.remove('hidden');
-                activityLogTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Cargando registros...</td></tr>';
-
-                try {
-                    // Populate user filter
-                    const usersSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/users`));
-                    logUserFilter.innerHTML = '<option value="">Todos los Usuarios</option>';
-                    usersSnapshot.forEach(doc => {
-                        const u = doc.data();
-                        logUserFilter.add(new Option(`${u.firstName} ${u.lastName}`, u.dni));
-                    });
-                    logUserFilter.add(new Option('Administrador', ADMIN_USER));
-
-                    // Fetch logs
-                    const logsSnapshot = await getDocs(query(collection(db, `artifacts/${appId}/public/data/activity_logs`), orderBy("timestamp", "desc")));
-                    allLogsCache = logsSnapshot.docs.map(doc => doc.data());
-                    renderActivityLog();
-                } catch (error) {
-                    console.error("Error al cargar el log de actividad:", error);
-                    activityLogTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">No se pudieron cargar los registros.</td></tr>';
-                } finally {
-                    loadingIndicator.classList.add('hidden');
-                }
-            }
-
-            function renderActivityLog() {
-                let logsToRender = [...allLogsCache];
-
-                const user = logUserFilter.value;
-                const date = logDateFilter.value;
-                const action = logActionFilter.value.toLowerCase();
-                const details = logDetailsFilter.value.toLowerCase();
-
-                if (user) logsToRender = logsToRender.filter(log => log.userId === user);
-                if (date) logsToRender = logsToRender.filter(log => log.timestamp.startsWith(date));
-                if (action) logsToRender = logsToRender.filter(log => log.action.toLowerCase().includes(action));
-                if (details) logsToRender = logsToRender.filter(log => JSON.stringify(log.details).toLowerCase().includes(details));
-
-                activityLogTableBody.innerHTML = '';
-                if (logsToRender.length > 0) {
-                    logsToRender.forEach(log => {
-                        const tr = document.createElement('tr');
-                        tr.className = 'border-b border-gray-200 hover:bg-kumera-50 text-sm';
-                        const detailString = log.details && Object.keys(log.details).length > 0 ? `${log.details.documentName || ''} (ID: ${log.details.documentId || 'N/A'})` : 'N/A';
-                        tr.innerHTML = `
-                            <td class="py-2 px-3">${log.userName} (${log.userId})</td>
-                            <td class="py-2 px-3">${log.action}</td>
-                            <td class="py-2 px-3" title="${detailString}">${detailString.substring(0, 50)}${detailString.length > 50 ? '...' : ''}</td>
-                            <td class="py-2 px-3">${formatDate(log.timestamp, true)}</td>
-                        `;
-                        activityLogTableBody.appendChild(tr);
-                    });
-                } else {
-                    activityLogTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No se encontraron registros para los filtros aplicados.</td></tr>';
-                }
-            }
-            
-            // --- Lógica del Dashboard de Métricas ---
-            function renderMetricsDashboard() {
-                // Destruir instancias de gráficos anteriores para evitar problemas de renderizado
-                if (categoryChartInstance) categoryChartInstance.destroy();
-                if (subcategoryChartInstance) subcategoryChartInstance.destroy();
-
-                const docs = fullDocsCache.filter(doc => doc.status !== 'Borrador');
-
-                const categoryCounts = {};
-                const subcategoryCounts = {};
-                let totalSubcategories = new Set();
-
-                docs.forEach(doc => {
-                    if (doc.category) {
-                        categoryCounts[doc.category] = (categoryCounts[doc.category] || 0) + 1;
-                        
-                        if (doc.subcategory) {
-                            if (!subcategoryCounts[doc.category]) {
-                                subcategoryCounts[doc.category] = {};
-                            }
-                            subcategoryCounts[doc.category][doc.subcategory] = (subcategoryCounts[doc.category][doc.subcategory] || 0) + 1;
-                            totalSubcategories.add(`${doc.category}-${doc.subcategory}`);
-                        }
-                    }
-                });
-
-                // Actualizar tarjetas de resumen
-                document.getElementById('metricsTotalDocs').textContent = docs.length;
-                document.getElementById('metricsTotalCategories').textContent = Object.keys(categoryCounts).length;
-                document.getElementById('metricsTotalSubcategories').textContent = totalSubcategories.size;
-
-                const categoryLabels = Object.keys(categoryCounts);
-                const categoryData = Object.values(categoryCounts);
-                const chartColors = ['#bca953', '#94783a', '#785c31', '#ccbf78', '#dfd9a9'];
-
-                // Renderizar gráfico de categorías
-                const ctxCategory = document.getElementById('categoryChart').getContext('2d');
-                categoryChartInstance = new Chart(ctxCategory, {
-                    type: 'bar',
-                    data: {
-                        labels: categoryLabels,
-                        datasets: [{
-                            label: 'Documentos por Categoría',
-                            data: categoryData,
-                            backgroundColor: chartColors,
-                            borderColor: chartColors.map(c => c + 'B3'), // Opacidad
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false }, title: { display: true, text: 'Distribución por Categoría' } },
-                        scales: { y: { beginAtZero: true } },
-                        onClick: (event, elements) => {
-                            if (elements.length > 0) {
-                                const clickedIndex = elements[0].index;
-                                const clickedCategory = categoryLabels[clickedIndex];
-                                updateSubcategoryChart(clickedCategory, subcategoryCounts, chartColors);
-                            }
-                        }
-                    }
-                });
-
-                // Inicializar el gráfico de subcategorías (vacío al principio)
-                updateSubcategoryChart(null, subcategoryCounts, chartColors);
-            }
-
-            function updateSubcategoryChart(category, allSubcategoryData, colors) {
-                if (subcategoryChartInstance) {
-                    subcategoryChartInstance.destroy();
-                }
-
-                const subcategoryContainer = document.getElementById('subcategoryChartContainer');
-                const noSubcategoryDataMessage = document.getElementById('noSubcategoryData');
-                const subcategoryChartTitle = document.getElementById('subcategoryChartTitle');
-
-                const data = category ? allSubcategoryData[category] : null;
-
-                if (data && Object.keys(data).length > 0) {
-                    subcategoryContainer.classList.remove('hidden');
-                    noSubcategoryDataMessage.classList.add('hidden');
-                    subcategoryChartTitle.textContent = `Desglose de "${category}"`;
-
-                    const ctxSubcategory = document.getElementById('subcategoryChart').getContext('2d');
-                    subcategoryChartInstance = new Chart(ctxSubcategory, {
-                        type: 'doughnut',
-                        data: {
-                            labels: Object.keys(data),
-                            datasets: [{
-                                data: Object.values(data),
-                                backgroundColor: colors,
-                                hoverOffset: 4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { position: 'top' } }
-                        }
-                    });
-                } else {
-                    subcategoryContainer.classList.add('hidden');
-                    noSubcategoryDataMessage.classList.remove('hidden');
-                    if (category) {
-                         noSubcategoryDataMessage.textContent = `La categoría "${category}" no tiene subcategorías con documentos.`;
-                    } else {
-                         noSubcategoryDataMessage.textContent = 'Haga clic en una categoría para ver el desglose.';
-                    }
-                }
-            }
-
 
             function showModal(message) {
                 const modal = document.getElementById('modal');
@@ -524,7 +283,6 @@
             function renderDocuments() {
                 let docsToRender = [...allDocsCache];
                 
-                // Aplicar búsqueda global
                 const searchTerm = searchInput.value.toLowerCase();
                 if (searchTerm) {
                     docsToRender = docsToRender.filter(doc => 
@@ -532,7 +290,6 @@
                     );
                 }
 
-                // Aplicar filtros por columna
                 for (const field in columnFilters) {
                     const filterValue = columnFilters[field].toLowerCase();
                     if (filterValue) {
@@ -566,7 +323,6 @@
                     const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
                     let constraints = [];
 
-                    // Agregar filtros de categoría (where clauses)
                     if (currentFilterCategory) constraints.push(where("category", "==", currentFilterCategory));
                     if (currentFilterSubcategory) constraints.push(where("subcategory", "==", currentFilterSubcategory));
                     if (currentFilterStatus) constraints.push(where("status", "==", currentFilterStatus));
@@ -576,7 +332,6 @@
 
                     let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    // Ordenamiento en el cliente
                     docs.sort((a, b) => {
                         const field = sortState.field;
                         const dir = sortState.direction === 'asc' ? 1 : -1;
@@ -652,7 +407,6 @@
                 return tr;
             }
 
-            // --- Lógica para contadores de categorías ---
             function loadAllDocsForCount() {
                 if (unsubscribeCounts) unsubscribeCounts();
                 const filesCollectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
@@ -714,33 +468,22 @@
                 ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Cargando...</td></tr>';
 
                 try {
-                    // CORRECCIÓN: Se elimina el orderBy de la consulta para evitar el error de índice.
-                    const q = query(collection(db, `artifacts/${appId}/public/data/digital_library_files`), where("subcategory", "==", "Orden del Día"));
+                    const q = query(collection(db, `artifacts/${appId}/public/data/digital_library_files`), where("subcategory", "==", "Orden del Día"), orderBy("sanctionDate", "desc"));
                     const snapshot = await getDocs(q);
                     
                     if (snapshot.empty) {
                         ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">No hay órdenes del día.</td></tr>';
-                        loadingIndicator.classList.add('hidden');
                         return;
                     }
                     
-                    // Se mapean los documentos y se ordenan en el cliente por fecha de sanción.
-                    let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    docs.sort((a, b) => {
-                        const dateA = a.sanctionDate ? new Date(a.sanctionDate).getTime() : 0;
-                        const dateB = b.sanctionDate ? new Date(b.sanctionDate).getTime() : 0;
-                        return dateB - dateA; // Orden descendente (más reciente primero)
-                    });
-
                     ordenesTableBody.innerHTML = '';
-                    docs.forEach(docData => {
-                        const row = createTableRow(docData, true);
+                    snapshot.forEach(doc => {
+                        const row = createTableRow({ id: doc.id, ...doc.data() }, true);
                         ordenesTableBody.appendChild(row);
                     });
-
                 } catch (error) {
                     console.error("Error cargando lista de órdenes del día:", error);
-                    ordenesTableBody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-red-500">Error al cargar la lista.</td></tr>`;
+                    ordenesTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-red-500">Error al cargar la lista.</td></tr>';
                 } finally {
                     loadingIndicator.classList.add('hidden');
                 }
@@ -749,9 +492,8 @@
             function populateDateSelectors() {
                 const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
                 const currentYear = new Date().getFullYear();
-                let startYear = 2020; // Año de inicio por defecto
+                let startYear = 2020;
 
-                // Se busca el año más antiguo de los documentos en caché para crear un rango de fechas dinámico.
                 const ordenesDelDiaDocs = fullDocsCache
                     .filter(doc => doc.subcategory === "Orden del Día" && doc.sanctionDate)
                     .map(doc => new Date(doc.sanctionDate));
@@ -791,14 +533,14 @@
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
                 const adjustedFirstDay = (firstDayOfMonth === 0) ? 6 : firstDayOfMonth - 1;
 
-                // Define el rango del mes actual para el filtro en el cliente
-                const startOfMonthTimestamp = new Date(year, month, 1).getTime();
-                const endOfMonthTimestamp = new Date(year, month, daysInMonth, 23, 59, 59, 999).getTime();
+                const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+                const endDate = new Date(year, month, daysInMonth).toISOString().split('T')[0];
                 
-                // CORRECCIÓN: Se quita el filtro de fecha de la consulta a Firebase para evitar el error de índice.
                 const q = query(
                     collection(db, `artifacts/${appId}/public/data/digital_library_files`),
-                    where("subcategory", "==", "Orden del Día")
+                    where("subcategory", "==", "Orden del Día"),
+                    where("sanctionDate", ">=", startDate),
+                    where("sanctionDate", "<=", endDate)
                 );
                 
                 const docsByDay = {};
@@ -806,32 +548,23 @@
                     const snapshot = await getDocs(q);
                     snapshot.forEach(doc => {
                         const data = doc.data();
+                        const date = new Date(data.sanctionDate);
+                        const offset = date.getTimezoneOffset();
+                        date.setMinutes(date.getMinutes() + offset);
+                        const day = date.getDate();
                         
-                        // FILTRO POR FECHA EN EL CLIENTE:
-                        if (data.sanctionDate) {
-                            const sanctionDate = new Date(data.sanctionDate);
-                            // Se ajusta la fecha para evitar problemas de zona horaria (YYYY-MM-DD se interpreta como UTC).
-                            const adjustedDate = new Date(sanctionDate.getUTCFullYear(), sanctionDate.getUTCMonth(), sanctionDate.getUTCDate());
-                            const dateTimestamp = adjustedDate.getTime();
-
-                            if (dateTimestamp >= startOfMonthTimestamp && dateTimestamp <= endOfMonthTimestamp) {
-                                const day = adjustedDate.getDate();
-                                if (!docsByDay[day]) docsByDay[day] = [];
-                                docsByDay[day].push({ id: doc.id, ...data });
-                            }
-                        }
+                        if (!docsByDay[day]) docsByDay[day] = [];
+                        docsByDay[day].push({ id: doc.id, ...data });
                     });
                 } catch(error) {
                     console.error("Error fetching calendar docs:", error);
                     dailyDocsContainer.innerHTML = '<p class="text-center text-red-500">Error al cargar los datos del calendario.</p>';
                 }
 
-                // Rellenar días vacíos al inicio
                 for (let i = 0; i < adjustedFirstDay; i++) {
                     calendarGrid.innerHTML += `<div class="border border-gray-200 bg-gray-50"></div>`;
                 }
 
-                // Rellenar días del mes
                 for (let day = 1; day <= daysInMonth; day++) {
                     const dayDocs = docsByDay[day];
                     const hasDocs = dayDocs && dayDocs.length > 0 ? 'has-docs' : '';
@@ -894,7 +627,6 @@
 
             // --- Event Listeners ---
             
-            // Búsqueda y Filtros de la lista principal
             searchInput.disabled = false;
             searchInput.placeholder = "Buscar en todo...";
             searchInput.addEventListener('input', debounce(renderDocuments, 300));
@@ -911,7 +643,6 @@
             document.querySelectorAll('.sortable').forEach(header => {
                 header.addEventListener('click', () => {
                     const field = header.dataset.field;
-                    // Si se hace clic en la misma columna, se invierte la dirección. Si no, se establece en 'asc'.
                     if (sortState.field === field) {
                         sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
                     } else {
@@ -941,7 +672,6 @@
                 }
             });
 
-            // Navegación del Calendario
             prevMonthBtn.addEventListener('click', () => {
                 calendarDate.setMonth(calendarDate.getMonth() - 1);
                 updateDateSelectors();
@@ -969,22 +699,6 @@
                 }
             });
 
-            // Listeners Log y Métricas
-            viewLogBtn.addEventListener('click', () => showView('activityLog'));
-            backToAdminBtn.addEventListener('click', () => showView('userAdmin'));
-            [logUserFilter, logDateFilter, logActionFilter, logDetailsFilter].forEach(el => {
-                el.addEventListener('input', debounce(renderActivityLog, 400));
-            });
-            sidebarMetricsBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.querySelectorAll('.sidebar-filter-item, .sidebar-item').forEach(i => i.classList.remove('active-filter'));
-                e.currentTarget.classList.add('active-filter');
-                showView('metrics');
-            });
-            backToAdminFromMetricsBtn.addEventListener('click', () => showView('userAdmin'));
-
-
-            // Navegación Sidebar
             document.getElementById('homeBtn').addEventListener('click', (e) => {
                 e.preventDefault();
                 document.querySelectorAll('.sidebar-filter-item, .sidebar-item').forEach(i => i.classList.remove('active-filter'));
@@ -999,7 +713,6 @@
                 showView('ordenesInternas');
             });
 
-            // Listeners para Importación por Lote
             batchImportBtn.addEventListener('click', () => {
                 batchImportModal.classList.remove('hidden');
                 batchImportForm.classList.remove('hidden');
@@ -1009,7 +722,6 @@
                 batchSubcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
                 batchSubcategorySelect.disabled = true;
                 
-                // Poblar y resetear selectores de fecha
                 batchMonthSelect.innerHTML = '<option value="">Mes...</option>';
                 const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
                 months.forEach((month, index) => {
@@ -1025,7 +737,8 @@
                 batchMonthSelect.value = '';
                 batchYearSelect.value = '';
                 batchScopeSelect.value = '';
-                
+                batchStatusSelect.value = 'Borrador';
+
                 confirmBatchImportBtn.disabled = false;
                 cancelBatchImportBtn.disabled = false;
             });
@@ -1038,14 +751,7 @@
             
             batchCategorySelect.addEventListener('change', () => {
                 const selectedCategory = batchCategorySelect.value;
-                batchSubcategorySelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
-                // Reutilizamos el mapa de subcategorías
-                 const subcategoryMap = {
-                    "Legislación": ["Tratados Internacionales", "Constitución Nacional", "Leyes Nacionales", "Códigos", "Decretos Nacionales", "Constitución Provincial", "Leyes Provinciales", "Decretos Provinciales", "Resoluciones Ministeriales"],
-                    "Doctrina": [],
-                    "Jurisprudencia": ["Internacional", "Nacional", "Federal", "Provincial"],
-                    "Institucional": ["Orden del Día", "Disposiciones", "Memos", "Protocolos", "Comunicaciones"]
-                };
+                subcategorySelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
                 if (selectedCategory && subcategoryMap[selectedCategory]?.length > 0) {
                     subcategoryMap[selectedCategory].forEach(subCat => batchSubcategorySelect.add(new Option(subCat, subCat)));
                     batchSubcategorySelect.disabled = false;
@@ -1054,7 +760,6 @@
                 }
             });
 
-            // El resto de los listeners (login, formularios, etc.)
             const loginForm = document.getElementById('loginForm');
             const loginUsernameInput = document.getElementById('loginUsername');
             const loginPasswordInput = document.getElementById('loginPassword');
@@ -1063,7 +768,7 @@
             const newFileBtn = document.getElementById('newFileBtn');
             const adminUsersBtn = document.getElementById('adminUsersBtn');
             const signOutBtn = document.getElementById('signOutBtn');
-            const profileBtn = document.getElementById('profileBtn');
+            const changePasswordBtn = document.getElementById('changePasswordBtn');
             const draftsBtn = document.getElementById('draftsBtn');
             const uploadForm = document.getElementById('uploadForm');
             const formTitle = document.getElementById('formTitle');
@@ -1103,16 +808,13 @@
             const confirmBtn = document.getElementById('confirmBtn');
             const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
             let confirmCallback = null;
-            const profileModal = document.getElementById('profileModal');
-            const profileForm = document.getElementById('profileForm');
+            const changePasswordModal = document.getElementById('changePasswordModal');
+            const changePasswordForm = document.getElementById('changePasswordForm');
             const newPasswordInput = document.getElementById('newPassword');
             const confirmPasswordInput = document.getElementById('confirmPassword');
-            const profileMessage = document.getElementById('profileMessage');
-            const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+            const changePasswordMessage = document.getElementById('changePasswordMessage');
+            const cancelChangePasswordBtn = document.getElementById('cancelChangePasswordBtn');
             const formLoadingIndicator = document.getElementById('formLoadingIndicator');
-            const promptEmailModal = document.getElementById('promptEmailModal');
-            const promptEmailForm = document.getElementById('promptEmailForm');
-
             const subcategoryMap = {
                 "Legislación": ["Tratados Internacionales", "Constitución Nacional", "Leyes Nacionales", "Códigos", "Decretos Nacionales", "Constitución Provincial", "Leyes Provinciales", "Decretos Provinciales", "Resoluciones Ministeriales"],
                 "Doctrina": [],
@@ -1128,46 +830,36 @@
                 if (user) {
                     authStatusDiv.textContent = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
                     signOutBtn.classList.remove('hidden');
-                    profileBtn.classList.remove('hidden');
+                    changePasswordBtn.classList.remove('hidden');
                     
                     if (user.role === 'admin') {
-                        [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn, sidebarMetricsBtn].forEach(el => el.classList.remove('hidden'));
+                        [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.remove('hidden'));
                     } else if (user.role === 'asesor legal') {
                         newFileBtn.classList.remove('hidden');
-                        [adminUsersBtn, draftsBtn, batchImportBtn, sidebarMetricsBtn].forEach(el => el.classList.add('hidden'));
-                    } else { // Rol 'user' u otros
-                         [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn, sidebarMetricsBtn].forEach(el => el.classList.add('hidden'));
+                        [adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
+                    } else { 
+                         [newFileBtn, adminUsersBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
                     }
                 } else {
                     authStatusDiv.textContent = 'No Autenticado';
-                    [newFileBtn, adminUsersBtn, signOutBtn, profileBtn, draftsBtn, batchImportBtn, sidebarMetricsBtn].forEach(el => el.classList.add('hidden'));
+                    [newFileBtn, adminUsersBtn, signOutBtn, changePasswordBtn, draftsBtn, batchImportBtn].forEach(el => el.classList.add('hidden'));
                 }
             }
             const loginSuccess = (user) => {
                 userRole = user.role;
                 userId = user.id || user.dni; 
-                currentUserName = `${user.firstName || 'Admin'} ${user.lastName || ''}`.trim();
                 currentUserDocId = user.docId;
-                currentUserData = user;
                 loginView.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 updateUserUI(user);
                 showView('welcome');
                 loadAllDocsForCount();
                 loadDocuments();
-                logUserActivity('login_success');
-                
-                if (user.role !== 'admin' && (!user.gmail || user.gmail.trim() === '')) {
-                    promptEmailModal.classList.remove('hidden');
-                }
             };
             const logout = () => {
-                logUserActivity('logout'); // Registrar el logout ANTES de limpiar las variables de usuario
                 userRole = null;
                 userId = null;
                 currentUserDocId = null;
-                currentUserName = null;
-                currentUserData = null;
                 loginView.classList.remove('hidden');
                 appContainer.classList.add('hidden');
                 updateUserUI(null);
@@ -1188,21 +880,21 @@
                     fileName, pdfLink, category: categorySelect.value, subcategory: subcategorySelect.disabled ? "" : subcategorySelect.value, documentNumber: document.getElementById('s_documentNumber').value.trim(), sanctionDate: document.getElementById('s_sanctionDate').value, promulgationDate: document.getElementById('s_promulgationDate').value, scope: scopeSelect.value, status: isDraft ? "Borrador" : (statusSelect.value || "Vigente"), userKeywords: userKeywordsInput.value.split(',').map(kw => kw.trim()).filter(Boolean), observations: observationsTextarea.value.trim(), timestamp: new Date().toISOString(), uploadedBy: userId,
                 };
                 
+                // Limpiar el estado final deseado si ya no es un borrador
+                if (!isDraft) {
+                    docData.intendedStatus = null;
+                }
+
                 try {
-                    let action = '';
                     if (currentEditingDocId) {
-                        action = isDraft ? 'edit_draft' : 'edit_document';
                         const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, currentEditingDocId);
                         await setDoc(docRef, docData, { merge: true });
                         showModal('Documento actualizado correctamente.');
                     } else {
-                        action = isDraft ? 'create_draft' : 'create_document';
                         const collectionRef = collection(db, `artifacts/${appId}/public/data/digital_library_files`);
-                        const newDocRef = await addDoc(collectionRef, docData);
-                        currentEditingDocId = newDocRef.id; // Asignamos el ID por si se quiere registrar en el log
+                        await addDoc(collectionRef, docData);
                         showModal(`Documento ${isDraft ? 'guardado como borrador' : 'guardado'}.`);
                     }
-                    logUserActivity(action, { documentId: currentEditingDocId, documentName: docData.fileName });
                     uploadForm.reset();
                     formPdfPreview.innerHTML = '';
                     currentEditingDocId = null;
@@ -1227,6 +919,7 @@
                 const selectedMonth = batchMonthSelect.value;
                 const selectedYear = batchYearSelect.value;
                 const selectedScope = batchScopeSelect.value;
+                const intendedStatus = batchStatusSelect.value;
                 let sanctionDate = "";
 
                 if (selectedYear !== "" && selectedMonth !== "") {
@@ -1249,13 +942,11 @@
 
                 let successes = 0;
                 let failures = 0;
-                let importedFileNames = [];
 
                 const importPromises = urls.map(async (url, index) => {
                     try {
                         batchImportProgress.textContent = `Procesando enlace ${index + 1} de ${urls.length}...`;
                         
-                        // Usamos un proxy CORS para obtener el título de la página de Google Drive
                         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                         const response = await fetch(proxyUrl);
                         if (!response.ok) throw new Error(`Error de red`);
@@ -1265,13 +956,12 @@
                         if (titleMatch && titleMatch[1]) {
                             fileName = titleMatch[1].replace(/ - Google Drive$/, '').trim();
                         }
-                        importedFileNames.push(fileName);
 
                         const docData = {
                             fileName,
                             pdfLink: url,
-                            status: "Borrador", // Todos se guardan como borradores
-                            intendedStatus: "No se especifica", // Guardamos el estado final deseado.
+                            status: "Borrador",
+                            intendedStatus: intendedStatus,
                             timestamp: new Date().toISOString(),
                             uploadedBy: userId,
                             category: selectedCategory,
@@ -1294,7 +984,6 @@
                 });
 
                 await Promise.all(importPromises);
-                logUserActivity('batch_import', { successCount: successes, failCount: failures, files: importedFileNames });
                 batchImportModal.classList.add('hidden');
                 showModal(`Importación completada. ${successes} documentos creados. ${failures > 0 ? `${failures} enlaces fallaron.` : ''}`);
             }
@@ -1307,7 +996,6 @@
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        logUserActivity('view_document', { documentId: docId, documentName: data.fileName });
                         detailFileName.textContent = data.fileName || 'N/A';
                         detailCategory.textContent = data.category || 'N/A';
                         detailSubcategory.textContent = data.subcategory || 'N/A';
@@ -1371,13 +1059,10 @@
                         categorySelect.dispatchEvent(new Event('change'));
                         setTimeout(() => { subcategorySelect.value = data.subcategory || ''; }, 100);
                         scopeSelect.value = data.scope || '';
-                        
-                        // Lógica mejorada para el estado
-                        if (data.status === 'Borrador') {
-                            // Si es un borrador, usamos el estado pre-cargado o un valor por defecto.
-                            statusSelect.value = data.intendedStatus || 'No se especifica';
+
+                        if (data.status === 'Borrador' && data.intendedStatus) {
+                            statusSelect.value = data.intendedStatus;
                         } else {
-                            // Para documentos ya publicados, usamos su estado actual.
                             statusSelect.value = data.status || 'Vigente';
                         }
 
@@ -1400,19 +1085,13 @@
                     loadingIndicator.classList.add('hidden');
                 }
             }
-            async function handleDelete(docId) {
+            function handleDelete(docId) {
                 if (userRole !== 'admin') return;
-                
-                // Obtenemos el nombre del documento ANTES de eliminarlo para el log
-                const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
-                const docSnap = await getDoc(docRef);
-                const docName = docSnap.exists() ? docSnap.data().fileName : 'ID desconocido';
-                
                 showConfirmationModal('¿Está seguro de que desea eliminar este documento? Esta acción no se puede deshacer.', async () => {
                     loadingIndicator.classList.remove('hidden');
+                    const docRef = doc(db, `artifacts/${appId}/public/data/digital_library_files`, docId);
                     try {
                         await deleteDoc(docRef);
-                        logUserActivity('delete_document', { documentId: docId, documentName: docName });
                         showModal('Documento eliminado correctamente.');
                         if (currentViewingDocId === docId) showView('list');
                     } catch (error) {
@@ -1434,22 +1113,12 @@
                         const tr = document.createElement('tr');
                         tr.className = "border-b border-gray-200 hover:bg-gray-50 text-sm";
                         const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.dni;
-                        tr.innerHTML = `
-                            <td class="py-2 px-3">${fullName}</td>
-                            <td class="py-2 px-3">${userData.dni || 'N/A'}</td>
-                            <td class="py-2 px-3">${userData.gmail || 'N/A'}</td>
-                            <td class="py-2 px-3">${userData.role}</td>
-                            <td class="py-2 px-3 whitespace-nowrap">
-                                <button data-id="${doc.id}" class="edit-user-btn text-blue-600 hover:text-blue-800 p-1 rounded" title="Editar Email"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
-                                <button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><span class="custom-icon">◪</span></button>
-                                <button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><span class="custom-icon">⇔</span></button>
-                                <button data-id="${doc.id}" class="delete-user-btn text-red-600 hover:text-red-800 p-1 rounded" title="Eliminar Usuario"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                            </td>`;
+                        tr.innerHTML = `<td class="py-2 px-3">${fullName}</td><td class="py-2 px-3">${userData.dni || 'N/A'}</td><td class="py-2 px-3">${userData.role}</td><td class="py-2 px-3 whitespace-nowrap"><button data-id="${doc.id}" class="reset-password-btn text-yellow-600 hover:text-yellow-800 p-1 rounded" title="Blanquear Contraseña"><span class="custom-icon">◪</span></button><button data-id="${doc.id}" data-role="${userData.role}" class="toggle-role-btn text-purple-600 hover:text-purple-800 p-1 rounded" title="Cambiar Rol"><span class="custom-icon">⇔</span></button><button data-id="${doc.id}" class="delete-user-btn text-red-600 hover:text-red-800 p-1 rounded" title="Eliminar Usuario"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></td>`;
                         userTableBody.appendChild(tr);
                     });
                 } catch(error) {
                     console.error("Error renderizando usuarios:", error);
-                    userTableBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Error al cargar usuarios.</td></tr>`;
+                    userTableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">Error al cargar usuarios.</td></tr>`;
                 }
             }
             loginForm.addEventListener('submit', async (e) => {
@@ -1549,12 +1218,9 @@
                 const dni = document.getElementById('userAdminDni').value;
                 const password = document.getElementById('userAdminPassword').value;
                 const role = document.getElementById('userAdminRole').value;
-                const gmail = document.getElementById('userAdminGmail').value.trim();
-                
                 if (!firstName || !lastName || !dni || !password || !role) { showModal('Todos los campos son obligatorios.'); return; }
                 try {
-                    await addDoc(collection(db, `artifacts/${appId}/public/data/users`), { firstName, lastName, dni, password, role, gmail });
-                    logUserActivity('create_user', { createdUserDni: dni, createdUserName: `${firstName} ${lastName}` });
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/users`), { firstName, lastName, dni, password, role });
                     showModal(`Usuario "${firstName} ${lastName}" creado.`);
                     userAdminForm.reset();
                     renderUsers();
@@ -1573,117 +1239,58 @@
                     formPdfPreview.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 bg-gray-100 rounded-lg p-4 text-center"><p>Enlace no válido.</p></div>`;
                 }
             });
-            profileBtn.addEventListener('click', () => {
-                profileModal.classList.remove('hidden');
-                document.getElementById('profileEmail').value = currentUserData.gmail || '';
-                profileForm.reset();
-                profileMessage.classList.add('hidden');
+            changePasswordBtn.addEventListener('click', () => {
+                changePasswordModal.classList.remove('hidden');
             });
-            cancelProfileBtn.addEventListener('click', () => {
-                profileModal.classList.add('hidden');
-                profileForm.reset();
-                profileMessage.classList.add('hidden');
+            cancelChangePasswordBtn.addEventListener('click', () => {
+                changePasswordModal.classList.add('hidden');
+                changePasswordForm.reset();
+                changePasswordMessage.classList.add('hidden');
             });
-            profileForm.addEventListener('submit', async (e) => {
+            changePasswordForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const newEmail = document.getElementById('profileEmail').value.trim();
                 const newPassword = newPasswordInput.value;
                 const confirmPassword = confirmPasswordInput.value;
-                
-                const updateData = {};
-                let passwordChanged = false;
-
-                if (newPassword || confirmPassword) {
-                    if (newPassword !== confirmPassword) {
-                        profileMessage.textContent = 'Las contraseñas no coinciden.';
-                        profileMessage.classList.remove('hidden');
-                        return;
-                    }
-                    if (newPassword.length < 6) {
-                        profileMessage.textContent = 'La contraseña debe tener al menos 6 caracteres.';
-                        profileMessage.classList.remove('hidden');
-                        return;
-                    }
-                    updateData.password = newPassword;
-                    passwordChanged = true;
-                }
-
-                if (newEmail !== (currentUserData.gmail || '')) {
-                    updateData.gmail = newEmail;
-                }
-                
-                if (Object.keys(updateData).length === 0) {
-                    profileModal.classList.add('hidden');
-                    return; 
-                }
-
-                if (!currentUserDocId) {
-                    if (passwordChanged) {
-                        showModal('La contraseña del admin no se puede cambiar aquí.');
-                    }
+                if (newPassword !== confirmPassword) {
+                    changePasswordMessage.textContent = 'Las contraseñas no coinciden.';
+                    changePasswordMessage.classList.remove('hidden');
                     return;
                 }
-
+                if (newPassword.length < 6) {
+                    changePasswordMessage.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+                    changePasswordMessage.classList.remove('hidden');
+                    return;
+                }
+                if (!currentUserDocId) {
+                    showModal('La contraseña del admin no se puede cambiar aquí.');
+                    return;
+                }
                 try {
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
-                    await updateDoc(userRef, updateData);
-                    
-                    if (updateData.gmail) currentUserData.gmail = updateData.gmail;
-
-                    logUserActivity('update_profile', { changedFields: Object.keys(updateData) });
-                    showModal('Perfil actualizado correctamente.');
-                    profileModal.classList.add('hidden');
+                    await updateDoc(userRef, { password: newPassword });
+                    showModal('Contraseña actualizada.');
+                    changePasswordModal.classList.add('hidden');
+                    changePasswordForm.reset();
                 } catch (error) {
-                    console.error("Error al actualizar perfil:", error);
+                    console.error("Error al cambiar la contraseña:", error);
                     showModal(`Error: ${error.message}`);
                 }
             });
-
-            promptEmailForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const newEmail = document.getElementById('promptEmailInput').value.trim();
-                if (!newEmail || !currentUserDocId) return;
-
-                try {
-                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserDocId);
-                    await updateDoc(userRef, { gmail: newEmail });
-                    
-                    currentUserData.gmail = newEmail;
-                    
-                    showModal('Email actualizado correctamente.');
-                    promptEmailModal.classList.add('hidden');
-                    logUserActivity('add_initial_email');
-                } catch (error) {
-                    console.error("Error al actualizar email inicial:", error);
-                    showModal(`Error: ${error.message}`);
-                }
-            });
-
             userTableBody.addEventListener('click', async (e) => {
                 const target = e.target.closest('button');
                 if (!target) return;
                 const docId = target.dataset.id;
                 const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, docId);
-                const userDocSnap = await getDoc(userDocRef);
-                const targetUserData = userDocSnap.data();
-                const targetUserInfo = { userId: targetUserData.dni, userName: `${targetUserData.firstName} ${targetUserData.lastName}` };
                 
-                if (target.classList.contains('edit-user-btn')) {
-                    if (userDocSnap.exists()) {
-                        editUserId.value = docId;
-                        editUserEmail.value = targetUserData.gmail || '';
-                        editUserModalTitle.textContent = `Editando: ${targetUserData.firstName} ${targetUserData.lastName}`;
-                        editUserModal.classList.remove('hidden');
-                    }
-                } else if (target.classList.contains('reset-password-btn')) {
+                if (target.classList.contains('reset-password-btn')) {
                     showConfirmationModal('¿Blanquear la contraseña a "0000"?', async () => {
                         await updateDoc(userDocRef, { password: '0000' });
-                        logUserActivity('reset_password_other', targetUserInfo);
                         showModal('Contraseña blanqueada.');
                         renderUsers();
                     });
                 } else if (target.classList.contains('toggle-role-btn')) {
-                    const currentRole = targetUserData.role;
+                    const userDocSnap = await getDoc(userDocRef);
+                    const currentRole = userDocSnap.data()?.role;
                     let newRole;
                     if (currentRole === 'admin') newRole = 'asesor legal';
                     else if (currentRole === 'asesor legal') newRole = 'user';
@@ -1691,14 +1298,12 @@
                     
                     showConfirmationModal(`¿Cambiar el rol a "${newRole}"?`, async () => {
                         await updateDoc(userDocRef, { role: newRole });
-                        logUserActivity('change_role_other', { ...targetUserInfo, oldRole: currentRole, newRole: newRole });
                         showModal('Rol de usuario cambiado.');
                         renderUsers();
                     });
                 } else if (target.classList.contains('delete-user-btn')) {
                     showConfirmationModal('¿Está seguro de eliminar este usuario?', async () => {
                         await deleteDoc(userDocRef);
-                        logUserActivity('delete_user', targetUserInfo);
                         showModal('Usuario eliminado.');
                         renderUsers();
                     });
@@ -1712,31 +1317,6 @@
                 showView('list');
             });
             
-            // Listeners para modal de edición de usuario
-            cancelEditUserBtn.addEventListener('click', () => {
-                editUserModal.classList.add('hidden');
-                editUserForm.reset();
-            });
-
-            editUserForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const userIdToUpdate = editUserId.value;
-                const newEmail = editUserEmail.value.trim();
-
-                if (!userIdToUpdate) return;
-
-                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userIdToUpdate);
-                try {
-                    await updateDoc(userDocRef, { gmail: newEmail });
-                    logUserActivity('update_user_email', { updatedUserId: userIdToUpdate, newEmail: newEmail });
-                    showModal('Email del usuario actualizado correctamente.');
-                    editUserModal.classList.add('hidden');
-                    renderUsers();
-                } catch (error) {
-                    console.error("Error actualizando email de usuario:", error);
-                    showModal(`Error al actualizar: ${error.message}`);
-                }
-            });
         });
     </script>
 </head>
@@ -1757,8 +1337,8 @@
                         <input type="password" id="loginPassword" placeholder="Contraseña" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-kumera-500" required>
                     </div>
                     <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Ingresar</button>
-                    <p class="text-sm text-gray-500 pt-2">Contacte al administrador para obtener credenciales o reportar incidentes normativapenitenciaria.spc@gmail.com .  RECUERDE REGISTRAR SU GMAIL EN EL PERFIL E INICIAR SESION DE SU CUENTA DE CORREO EN EL MISMO NAVEGADOR PARA PODER VER LOS DOCUMENTOS DE FORMA CORRECTA</p>
-                    <div id="loginMessage" class="hidden mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800"></div>
+                    <p class="text-sm text-gray-500 pt-2">Contacte al administrador para obtener credenciales.</p>
+                    <div id="loginMessage" class="mt-2 p-3 rounded-lg text-sm bg-red-100 text-red-800 hidden"></div>
                 </form>
             </div>
         </div>
@@ -1797,19 +1377,14 @@
                     </div>
                     
                     <nav class="flex-1 space-y-1 px-2 overflow-y-auto mt-4">
-                        <div class="flex items-center space-x-1">
-                            <a href="#" id="homeBtn" class="sidebar-item group active-filter flex-grow">
-                                 <span class="flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                    </svg>
-                                    <span class="sidebar-text">Inicio</span>
-                                </span>
-                            </a>
-                             <a href="#" id="sidebarMetricsBtn" title="Ver Métricas" class="sidebar-item p-2 hidden">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" /></svg>
-                            </a>
-                        </div>
+                        <a href="#" id="homeBtn" class="sidebar-item group active-filter flex justify-between items-center">
+                             <span class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                                <span class="sidebar-text">Inicio</span>
+                            </span>
+                        </a>
                         <a href="#" class="sidebar-filter-item group flex justify-between items-center" data-main-category="Todos">
                              <span class="flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
@@ -1819,12 +1394,9 @@
                         </a>
                         <!-- Menú Legislación -->
                         <div>
-                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion" data-main-category="Legislación">
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-legislacion">
                                 <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3-5.804v10A7.969 7.969 0 015.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4A7.969 7.969 0 0011 4.804v10A7.968 7.968 0 0114.5 16c1.255 0 2.443-.29 3.5-.804v-10A7.968 7.968 0 0014.5 4z" /></svg><span class="sidebar-text">Legislación</span></span>
-                                <span class="flex items-center">
-                                    <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full mr-2"></span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                                </span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-legislacion" class="hidden pl-8 space-y-0.5 mt-1">
                                 <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Legislación"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
@@ -1847,12 +1419,9 @@
                              <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span>
                         </a>
                         <div>
-                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia" data-main-category="Jurisprudencia">
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-jurisprudencia">
                                 <span class="flex items-center"><span class="custom-icon mr-3 flex-shrink-0">▰</span><span class="sidebar-text">Jurisprudencia</span></span>
-                                <span class="flex items-center">
-                                    <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full mr-2"></span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                                </span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-jurisprudencia" class="hidden pl-8 space-y-0.5 mt-1">
                                 <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Jurisprudencia"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
@@ -1863,12 +1432,9 @@
                             </div>
                         </div>
                         <div>
-                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional" data-main-category="Institucional">
+                            <button class="collapsible-trigger sidebar-item w-full flex justify-between items-center group" data-target="menu-institucional">
                                 <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg><span class="sidebar-text">Institucional</span></span>
-                                <span class="flex items-center">
-                                    <span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full mr-2"></span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                                </span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-150 sidebar-text" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                             </button>
                             <div id="menu-institucional" class="hidden pl-8 space-y-0.5 mt-1">
                                <a href="#" class="sidebar-filter-item sidebar-submenu-item flex justify-between items-center" data-main-category="Institucional"><span>Ver Todo</span><span class="category-count bg-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full"></span></a>
@@ -1886,9 +1452,9 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.82 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.82 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.82-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.82-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                         <span class="sidebar-text">Admin Usuarios</span>
                     </a>
-                    <button id="profileBtn" class="w-full flex items-center justify-center space-x-2 bg-kumera-600 hover:bg-kumera-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
-                        <span class="custom-icon">👤</span>
-                        <span class="sidebar-text">Administrar Perfil</span>
+                    <button id="changePasswordBtn" class="w-full flex items-center justify-center space-x-2 bg-kumera-600 hover:bg-kumera-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
+                        <span class="custom-icon">↻</span>
+                        <span class="sidebar-text">Cambiar Contraseña</span>
                     </button>
                     <button id="signOutBtn" class="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>
@@ -2053,6 +1619,7 @@
                         </div>
                      </div>
                 </div>
+
                 <!-- Vistas de Formulario, Detalle, etc. -->
                 <div id="documentFormView" class="hidden">
                     <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg max-w-4xl mx-auto border border-gray-200">
@@ -2198,14 +1765,10 @@
                                     <input type="text" id="userAdminDni" class="w-full px-4 py-2.5 border rounded-lg" required>
                                 </div>
                                 <div>
-                                    <label for="userAdminGmail" class="block text-sm font-medium text-gray-700 mb-1">Cuenta de Gmail</label>
-                                    <input type="email" id="userAdminGmail" class="w-full px-4 py-2.5 border rounded-lg" placeholder="usuario@gmail.com">
-                                </div>
-                                <div>
                                     <label for="userAdminPassword" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
                                     <input type="password" id="userAdminPassword" class="w-full px-4 py-2.5 border rounded-lg" required>
                                 </div>
-                                <div>
+                                <div class="md:col-span-2">
                                     <label for="userAdminRole" class="block text-sm font-medium text-gray-700 mb-1">Rol</label>
                                     <select id="userAdminRole" class="w-full px-4 py-2.5 border rounded-lg bg-white" required>
                                         <option value="user">Usuario</option>
@@ -2216,12 +1779,6 @@
                                 <button type="submit" id="createUserBtn" class="md:col-span-2 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg">Crear</button>
                             </form>
                         </div>
-                        <div class="flex justify-end space-x-4 mb-6">
-                            <button id="viewLogBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 4H7a1 1 0 100 2h6a1 1 0 100-2zm-6 4h6a1 1 0 100 2H7a1 1 0 100-2z" clip-rule="evenodd" /></svg>
-                                <span>Ver Registro de Actividad</span>
-                            </button>
-                        </div>
                         <div>
                             <h3 class="text-xl font-semibold text-inst-dark mb-4">Usuarios Existentes</h3>
                             <div class="overflow-x-auto border rounded-lg">
@@ -2230,7 +1787,6 @@
                                         <tr>
                                             <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Nombre Completo</th>
                                             <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">DNI</th>
-                                            <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Cuenta de Gmail</th>
                                             <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Rol</th>
                                             <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Acciones</th>
                                         </tr>
@@ -2241,93 +1797,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Vista de Métricas -->
-                <div id="metricsView" class="hidden">
-                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-200">
-                        <div class="flex justify-between items-center mb-6 border-b pb-4">
-                            <h2 class="text-3xl font-bold text-inst-dark">Métricas de la Biblioteca</h2>
-                            <button id="backToAdminFromMetricsBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm">Volver a Admin</button>
-                        </div>
-                        
-                        <!-- Tarjetas de Resumen -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                            <div class="bg-blue-50 p-6 rounded-lg border border-blue-200 text-center">
-                                <h4 class="text-sm font-semibold text-blue-800 uppercase">Total Documentos</h4>
-                                <p id="metricsTotalDocs" class="text-4xl font-bold text-blue-900 mt-2">0</p>
-                            </div>
-                            <div class="bg-green-50 p-6 rounded-lg border border-green-200 text-center">
-                                <h4 class="text-sm font-semibold text-green-800 uppercase">Categorías Únicas</h4>
-                                <p id="metricsTotalCategories" class="text-4xl font-bold text-green-900 mt-2">0</p>
-                            </div>
-                            <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200 text-center">
-                                <h4 class="text-sm font-semibold text-yellow-800 uppercase">Subcategorías Únicas</h4>
-                                <p id="metricsTotalSubcategories" class="text-4xl font-bold text-yellow-900 mt-2">0</p>
-                            </div>
-                        </div>
-
-                        <!-- Gráficos -->
-                        <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                            <div class="lg:col-span-3 bg-gray-50 p-6 rounded-lg border">
-                                <div class="relative h-96">
-                                    <canvas id="categoryChart"></canvas>
-                                </div>
-                            </div>
-                            <div class="lg:col-span-2 bg-gray-50 p-6 rounded-lg border flex flex-col items-center justify-center">
-                                 <h3 id="subcategoryChartTitle" class="text-lg font-semibold text-inst-dark mb-4 text-center"></h3>
-                                <div id="subcategoryChartContainer" class="relative h-80 w-full">
-                                    <canvas id="subcategoryChart"></canvas>
-                                </div>
-                                <p id="noSubcategoryData" class="text-gray-500 text-center"></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-
-                <!-- Vista de Log de Actividad -->
-                 <div id="activityLogView" class="hidden">
-                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl border border-gray-200">
-                        <div class="flex justify-between items-center mb-6 border-b pb-4">
-                            <h2 class="text-3xl font-bold text-inst-dark">Registro de Actividad</h2>
-                            <button id="backToAdminBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm">Volver a Admin</button>
-                        </div>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
-                            <div>
-                                <label for="logUserFilter" class="text-xs font-medium text-gray-600">Usuario</label>
-                                <select id="logUserFilter" class="w-full mt-1 p-2 border rounded-md text-sm"></select>
-                            </div>
-                             <div>
-                                <label for="logDateFilter" class="text-xs font-medium text-gray-600">Fecha</label>
-                                <input type="date" id="logDateFilter" class="w-full mt-1 p-2 border rounded-md text-sm">
-                            </div>
-                             <div>
-                                <label for="logActionFilter" class="text-xs font-medium text-gray-600">Acción</label>
-                                <input type="text" id="logActionFilter" placeholder="Ej: view_document" class="w-full mt-1 p-2 border rounded-md text-sm">
-                            </div>
-                             <div>
-                                <label for="logDetailsFilter" class="text-xs font-medium text-gray-600">Detalles</label>
-                                <input type="text" id="logDetailsFilter" placeholder="Nombre de archivo..." class="w-full mt-1 p-2 border rounded-md text-sm">
-                            </div>
-                        </div>
-
-                        <div class="overflow-x-auto border rounded-lg">
-                            <table class="min-w-full divide-y">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Usuario</th>
-                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Acción</th>
-                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Detalles</th>
-                                        <th class="py-3.5 px-4 text-left text-xs font-semibold uppercase">Fecha y Hora</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="activityLogTableBody" class="divide-y bg-white"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
             </main>
         </div>
     </div>
@@ -2352,47 +1821,27 @@
             </div>
         </div>
     </div>
-    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
+    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-kumera-500">
-            <h3 class="text-xl font-semibold text-inst-dark mb-3">Administrar Perfil</h3>
-            <form id="profileForm" class="space-y-4">
-                <div>
-                    <label for="profileEmail" class="block text-sm font-medium text-gray-700">Cuenta de Gmail</label>
-                    <input type="email" id="profileEmail" class="w-full mt-1 px-4 py-2.5 border rounded-lg">
-                </div>
-                <div class="border-t my-4"></div>
-                <p class="text-sm text-gray-500 -mt-2 mb-2">Deje los campos de contraseña en blanco si no desea cambiarla.</p>
+            <h3 class="text-xl font-semibold text-inst-dark mb-3">Cambiar Contraseña</h3>
+            <form id="changePasswordForm" class="space-y-4">
                 <div>
                     <label for="newPassword" class="block text-sm font-medium text-gray-700">Nueva Contraseña</label>
-                    <input type="password" id="newPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg">
+                    <input type="password" id="newPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
                 </div>
                 <div>
                     <label for="confirmPassword" class="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
-                    <input type="password" id="confirmPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg">
+                    <input type="password" id="confirmPassword" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
                 </div>
-                <div id="profileMessage" class="hidden text-sm text-red-600"></div>
+                <div id="changePasswordMessage" class="hidden"></div>
                 <div class="mt-6 flex justify-end space-x-3">
-                    <button id="cancelProfileBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                    <button id="cancelChangePasswordBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
                     <button type="submit" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Guardar</button>
                 </div>
             </form>
         </div>
     </div>
-     <div id="promptEmailModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-[102] p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-kumera-500">
-            <h3 class="text-xl font-semibold text-inst-dark mb-3">Actualice su Perfil</h3>
-            <p class="text-sm text-gray-600 mb-4">Por favor, registre su cuenta de Gmail para continuar.</p>
-            <form id="promptEmailForm" class="space-y-4">
-                <div>
-                    <label for="promptEmailInput" class="block text-sm font-medium text-gray-700">Cuenta de Gmail</label>
-                    <input type="email" id="promptEmailInput" class="w-full mt-1 px-4 py-2.5 border rounded-lg" required>
-                </div>
-                <div class="mt-6 text-right">
-                    <button type="submit" class="px-5 py-2 bg-kumera-500 text-white text-sm font-semibold rounded-lg hover:bg-kumera-600">Guardar</button>
-                </div>
-            </form>
-        </div>
-    </div>
+
     <!-- Modal de Importación por Lote -->
     <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-3xl w-full mx-auto border-t-4 border-blue-500">
@@ -2440,6 +1889,15 @@
                             <option value="Provincial">Provincial</option>
                         </select>
                     </div>
+                    <div>
+                        <label for="batchStatusSelect" class="block text-sm font-medium text-gray-700 mb-1">Estado Final (Pre-carga)</label>
+                        <select id="batchStatusSelect" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-kumera-500">
+                            <option value="Borrador">Borrador</option>
+                            <option value="Vigente">Vigente</option>
+                            <option value="Derogado">Derogado</option>
+                            <option value="No se especifica">No se especifica</option>
+                        </select>
+                    </div>
                 </div>
                 <textarea id="batchLinksTextarea" rows="8" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm" placeholder="https://drive.google.com/file/d/..., https://drive.google.com/file/d/..."></textarea>
             </div>
@@ -2453,26 +1911,6 @@
             </div>
         </div>
     </div>
-    <!-- Modal Editar Email de Usuario -->
-    <div id="editUserModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[101] p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-auto border-t-4 border-blue-500">
-            <h3 class="text-xl font-semibold text-inst-dark mb-1">Editar Usuario</h3>
-            <p id="editUserModalTitle" class="text-sm text-gray-500 mb-4"></p>
-            <form id="editUserForm" class="space-y-4">
-                <input type="hidden" id="editUserId">
-                <div>
-                    <label for="editUserEmail" class="block text-sm font-medium text-gray-700">Cuenta de Gmail</label>
-                    <input type="email" id="editUserEmail" class="w-full mt-1 px-4 py-2.5 border rounded-lg" placeholder="usuario@gmail.com" required>
-                </div>
-                <div id="editUserMessage" class="hidden text-sm text-red-600"></div>
-                <div class="mt-6 flex justify-end space-x-3">
-                    <button id="cancelEditUserBtn" type="button" class="px-5 py-2 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
-                    <button type="submit" class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700">Guardar Cambios</button>
-                </div>
-            </form>
-        </div>
-    </div>
 </body>
 </html>
-
 
